@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="description" content="QR code generator with SVG and PNG export.">
+    <title>QR Generator</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+    <script src="vendor/qrcode.js" defer></script>
+    <script src="script.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>QR Generator</h1>
+        <div class="header-actions">
+          <button id="resetButton" class="icon-button" type="button" aria-label="Reset" title="Reset">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <section id="canvasArea" class="canvas-area" aria-label="QR code preview">
+          <svg id="qrPreview" role="img" aria-label="Generated QR code"></svg>
+        </section>
+
+        <section class="controls" aria-label="Controls">
+          <label class="field url-field" for="urlInput">
+            <span>Link</span>
+            <input id="urlInput" type="url" value="https://example.com" placeholder="https://example.com" inputmode="url" autocomplete="url" spellcheck="false" aria-describedby="urlHelp">
+          </label>
+          <p id="urlHelp" class="field-help" aria-live="polite" hidden></p>
+
+          <div class="color-controls">
+            <div class="color-field">
+              <label for="qrColor">Color</label>
+              <span class="color-input-wrap">
+                <input id="qrColor" type="color" value="#202020">
+                <input id="qrColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Hex color value">
+              </span>
+            </div>
+          </div>
+
+          <div class="export-row">
+            <label class="visually-hidden" for="exportFormat">Format</label>
+            <select id="exportFormat">
+              <option value="png" selected>PNG</option>
+              <option value="svg">SVG</option>
+            </select>
+            <label class="visually-hidden" for="exportSize">Size</label>
+            <select id="exportSize">
+              <option value="32">32 px</option>
+              <option value="64">64 px</option>
+              <option value="128">128 px</option>
+              <option value="256">256 px</option>
+              <option value="512">512 px</option>
+              <option value="1024" selected>1024 px</option>
+              <option value="2048">2048 px</option>
+            </select>
+            <button id="downloadButton" class="download-button" type="button" aria-label="Download" title="Download">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></svg>
+            </button>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
