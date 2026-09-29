@@ -34,6 +34,37 @@
           </label>
           <p id="urlHelp" class="field-help" aria-live="polite" hidden></p>
 
+          <label class="field select-field" for="errorCorrection">
+            <span>Error correction</span>
+            <select id="errorCorrection">
+              <option value="L">Low · 7%</option>
+              <option value="M" selected>Medium · 15%</option>
+              <option value="Q">Quartile · 25%</option>
+              <option value="H">High · 30%</option>
+            </select>
+          </label>
+
+          <div class="style-controls">
+            <label class="field" for="moduleStyle">
+              <span>Module style</span>
+              <select id="moduleStyle">
+                <option value="square" selected>Square</option>
+                <option value="soft">Soft</option>
+                <option value="rounded">Rounded</option>
+                <option value="dots">Dots</option>
+              </select>
+            </label>
+
+            <label class="field" for="markerStyle">
+              <span>Marker style</span>
+              <select id="markerStyle">
+                <option value="square" selected>Square</option>
+                <option value="rounded">Rounded</option>
+                <option value="circle">Circle</option>
+              </select>
+            </label>
+          </div>
+
           <div class="color-controls">
             <div class="color-field">
               <label for="qrColor">Color</label>
