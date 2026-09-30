@@ -4,12 +4,20 @@ const defaults = {
   errorCorrection: "M",
   moduleStyle: "square",
   markerStyle: "square",
+  moduleScale: 100,
+  logoSize: 20,
+  showLogoArea: false,
+  clearLogoArea: false,
 };
 
 const state = {
   ...defaults,
   encodedUrl: defaults.url,
   qr: null,
+  logoDataUrl: "",
+  logoAspectRatio: 1,
+  logoImage: null,
+  logoName: "",
 };
 
 const elements = {
@@ -19,8 +27,19 @@ const elements = {
   errorCorrection: document.querySelector("#errorCorrection"),
   moduleStyle: document.querySelector("#moduleStyle"),
   markerStyle: document.querySelector("#markerStyle"),
+  moduleScale: document.querySelector("#moduleScale"),
+  moduleScaleValue: document.querySelector("#moduleScaleValue"),
   color: document.querySelector("#qrColor"),
   colorValue: document.querySelector("#qrColorValue"),
+  logoInput: document.querySelector("#logoInput"),
+  logoDropZone: document.querySelector("#logoDropZone"),
+  logoFileName: document.querySelector("#logoFileName"),
+  logoError: document.querySelector("#logoError"),
+  logoSize: document.querySelector("#logoSize"),
+  logoSizeValue: document.querySelector("#logoSizeValue"),
+  removeLogo: document.querySelector("#removeLogo"),
+  showLogoArea: document.querySelector("#showLogoArea"),
+  clearLogoArea: document.querySelector("#clearLogoArea"),
   reset: document.querySelector("#resetButton"),
   download: document.querySelector("#downloadButton"),
   exportFormat: document.querySelector("#exportFormat"),
@@ -31,6 +50,7 @@ const elements = {
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const QUIET_ZONE = 4;
 let toastTimer;
+let logoDragDepth = 0;
 
 function parseLink(value) {
   const trimmed = value.trim();
@@ -79,9 +99,15 @@ function circleCommand(centerX, centerY, radius) {
 }
 
 function moduleCommand(x, y, style) {
-  if (style === "dots") return circleCommand(x + .5, y + .5, .42);
-  if (style === "rounded") return roundedRectCommand(x + .07, y + .07, .86, .86, .3);
-  if (style === "soft") return roundedRectCommand(x + .03, y + .03, .94, .94, .16);
+  const size = state.moduleScale / 100;
+  const inset = (1 - size) / 2;
+  const left = x + inset;
+  const top = y + inset;
+
+  if (style === "dots") return circleCommand(x + .5, y + .5, size / 2);
+  if (style === "rounded") return roundedRectCommand(left, top, size, size, size * .35);
+  if (style === "soft") return roundedRectCommand(left, top, size, size, size * .16);
+  if (size < 1) return roundedRectCommand(left, top, size, size, 0);
   return `M${x} ${y}h1v1h-1z`;
 }
 
@@ -93,13 +119,29 @@ function isMarkerModule(row, column, count) {
   return (inTop && (inLeft || inRight)) || (inBottom && inLeft);
 }
 
+function moduleIntersectsBox(row, column, quietZone, box) {
+  if (!box) return false;
+  const size = state.moduleScale / 100;
+  const inset = (1 - size) / 2;
+  const left = column + quietZone + inset;
+  const top = row + quietZone + inset;
+  const right = left + size;
+  const bottom = top + size;
+  return right > box.x && left < box.x + box.width && bottom > box.y && top < box.y + box.height;
+}
+
 function modulesToPath(code, quietZone = QUIET_ZONE, style = state.moduleStyle) {
   const count = code.getModuleCount();
   const commands = [];
+  const exclusionBox = state.clearLogoArea ? getLogoBox(code, quietZone) : null;
 
   for (let row = 0; row < count; row += 1) {
     for (let column = 0; column < count; column += 1) {
-      if (code.isDark(row, column) && !isMarkerModule(row, column, count)) {
+      if (
+        code.isDark(row, column)
+        && !isMarkerModule(row, column, count)
+        && !moduleIntersectsBox(row, column, quietZone, exclusionBox)
+      ) {
         commands.push(moduleCommand(column + quietZone, row + quietZone, style));
       }
     }
@@ -149,6 +191,47 @@ function appendSvgMarkers(svg, code) {
   });
 }
 
+function getLogoBox(code, quietZone = QUIET_ZONE) {
+  const count = code.getModuleCount();
+  const maximum = count * (state.logoSize / 100);
+  const ratio = state.logoAspectRatio || 1;
+  const width = ratio >= 1 ? maximum : maximum * ratio;
+  const height = ratio >= 1 ? maximum / ratio : maximum;
+  return {
+    x: quietZone + (count - width) / 2,
+    y: quietZone + (count - height) / 2,
+    width,
+    height,
+  };
+}
+
+function appendSvgLogo(svg, code) {
+  if (!state.logoDataUrl) return;
+  const box = getLogoBox(code);
+  const image = setAttributes(document.createElementNS(SVG_NAMESPACE, "image"), {
+    x: formatNumber(box.x),
+    y: formatNumber(box.y),
+    width: formatNumber(box.width),
+    height: formatNumber(box.height),
+    href: state.logoDataUrl,
+    preserveAspectRatio: "xMidYMid meet",
+  });
+  svg.append(image);
+}
+
+function appendSvgLogoGuide(svg, code) {
+  if (!state.showLogoArea) return;
+  const box = getLogoBox(code);
+  const guide = setAttributes(document.createElementNS(SVG_NAMESPACE, "rect"), {
+    x: formatNumber(box.x),
+    y: formatNumber(box.y),
+    width: formatNumber(box.width),
+    height: formatNumber(box.height),
+    class: "logo-area-guide",
+  });
+  svg.append(guide);
+}
+
 function clearPreview() {
   elements.preview.replaceChildren();
   elements.preview.removeAttribute("viewBox");
@@ -166,6 +249,8 @@ function setValidation(message = "") {
 function render() {
   const result = parseLink(elements.url.value);
   elements.colorValue.value = state.color.toUpperCase();
+  elements.moduleScaleValue.textContent = `${state.moduleScale}%`;
+  elements.logoSizeValue.textContent = `${state.logoSize}%`;
 
   if (result.empty) {
     state.qr = null;
@@ -205,6 +290,8 @@ function render() {
 
   elements.preview.replaceChildren(path);
   appendSvgMarkers(elements.preview, state.qr);
+  appendSvgLogo(elements.preview, state.qr);
+  appendSvgLogoGuide(elements.preview, state.qr);
   elements.preview.setAttribute("viewBox", `0 0 ${dimension} ${dimension}`);
   elements.preview.setAttribute(
     "shape-rendering",
@@ -219,6 +306,138 @@ function setColor(value) {
   render();
 }
 
+function setLogoError(message = "") {
+  elements.logoError.textContent = message;
+  elements.logoError.hidden = !message;
+}
+
+function containsUnsafeCss(value) {
+  if (/@import|javascript:|expression\s*\(/i.test(value)) return true;
+  const urls = [...value.matchAll(/url\(([^)]+)\)/gi)];
+  return urls.some((match) => {
+    const target = match[1].trim().replace(/^['"]|['"]$/g, "");
+    return !target.startsWith("#") && !/^data:image\/(?:png|jpe?g|gif|webp);base64,/i.test(target);
+  });
+}
+
+function sanitizeLogoSvg(source) {
+  const documentNode = new DOMParser().parseFromString(source, "image/svg+xml");
+  const root = documentNode.documentElement;
+  if (root.localName !== "svg" || documentNode.querySelector("parsererror")) {
+    throw new Error("Choose a valid SVG file.");
+  }
+
+  documentNode.querySelectorAll("script, foreignObject, iframe, object, embed, audio, video").forEach((node) => node.remove());
+
+  documentNode.querySelectorAll("*").forEach((node) => {
+    [...node.attributes].forEach((attribute) => {
+      const name = attribute.name.toLowerCase();
+      const value = attribute.value.trim();
+
+      if (name.startsWith("on") || /javascript:/i.test(value)) {
+        node.removeAttribute(attribute.name);
+        return;
+      }
+
+      if (name === "href" || name === "xlink:href") {
+        const allowedReference = value.startsWith("#") || /^data:image\/(?:png|jpe?g|gif|webp);base64,/i.test(value);
+        if (!allowedReference) node.removeAttribute(attribute.name);
+        return;
+      }
+
+      if ((name === "style" || value.toLowerCase().includes("url(")) && containsUnsafeCss(value)) {
+        node.removeAttribute(attribute.name);
+      }
+    });
+  });
+
+  documentNode.querySelectorAll("style").forEach((node) => {
+    if (containsUnsafeCss(node.textContent || "")) node.remove();
+  });
+
+  if (!root.getAttribute("xmlns")) root.setAttribute("xmlns", SVG_NAMESPACE);
+
+  const viewBox = (root.getAttribute("viewBox") || "").trim().split(/[\s,]+/).map(Number);
+  let aspectRatio = 1;
+  if (viewBox.length === 4 && viewBox[2] > 0 && viewBox[3] > 0) {
+    aspectRatio = viewBox[2] / viewBox[3];
+  } else {
+    const width = Number.parseFloat(root.getAttribute("width"));
+    const height = Number.parseFloat(root.getAttribute("height"));
+    if (width > 0 && height > 0) aspectRatio = width / height;
+  }
+
+  return {
+    source: new XMLSerializer().serializeToString(root),
+    aspectRatio,
+  };
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(reader.result));
+    reader.addEventListener("error", () => reject(new Error("The SVG could not be read.")));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function loadLogoImage(source) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.addEventListener("load", () => resolve(image));
+    image.addEventListener("error", () => reject(new Error("The SVG could not be rendered.")));
+    image.src = source;
+  });
+}
+
+async function handleLogoFile(file) {
+  if (!file) return;
+  setLogoError();
+
+  if (!/\.svg$/i.test(file.name) && file.type !== "image/svg+xml") {
+    setLogoError("Choose an SVG file.");
+    return;
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    setLogoError("The SVG must be smaller than 5 MB.");
+    return;
+  }
+
+  try {
+    const sanitized = sanitizeLogoSvg(await file.text());
+    const dataUrl = await blobToDataUrl(new Blob([sanitized.source], { type: "image/svg+xml" }));
+    const image = await loadLogoImage(dataUrl);
+    state.logoDataUrl = dataUrl;
+    state.logoAspectRatio = sanitized.aspectRatio;
+    state.logoImage = image;
+    state.logoName = file.name;
+    elements.logoFileName.textContent = file.name;
+    elements.logoFileName.title = file.name;
+    elements.logoDropZone.classList.add("has-logo");
+    elements.removeLogo.hidden = false;
+    render();
+  } catch (error) {
+    setLogoError(error.message || "The SVG could not be loaded.");
+  }
+}
+
+function clearLogo(renderAfter = true) {
+  logoDragDepth = 0;
+  state.logoDataUrl = "";
+  state.logoAspectRatio = 1;
+  state.logoImage = null;
+  state.logoName = "";
+  elements.logoInput.value = "";
+  elements.logoFileName.textContent = "SVG · Max 5 MB";
+  elements.logoFileName.removeAttribute("title");
+  elements.logoDropZone.classList.remove("has-logo", "drag-active");
+  elements.removeLogo.hidden = true;
+  setLogoError();
+  if (renderAfter) render();
+}
+
 elements.url.addEventListener("input", render);
 elements.errorCorrection.addEventListener("change", () => {
   state.errorCorrection = elements.errorCorrection.value;
@@ -230,6 +449,78 @@ elements.errorCorrection.addEventListener("change", () => {
     state[key] = elements[key].value;
     render();
   });
+});
+
+elements.moduleScale.addEventListener("input", () => {
+  state.moduleScale = Number(elements.moduleScale.value);
+  render();
+});
+
+elements.logoInput.addEventListener("change", async () => {
+  const [file] = elements.logoInput.files;
+  await handleLogoFile(file);
+  elements.logoInput.value = "";
+});
+
+elements.logoDropZone.addEventListener("click", (event) => {
+  if (event.target === elements.logoInput || event.target === elements.removeLogo) return;
+  elements.logoInput.click();
+});
+
+elements.logoDropZone.addEventListener("keydown", (event) => {
+  if (event.target === elements.logoInput || event.target === elements.removeLogo) return;
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  elements.logoInput.click();
+});
+
+elements.logoDropZone.addEventListener("dragenter", (event) => {
+  event.preventDefault();
+  logoDragDepth += 1;
+  elements.logoDropZone.classList.add("drag-active");
+});
+
+elements.logoDropZone.addEventListener("dragover", (event) => {
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+});
+
+elements.logoDropZone.addEventListener("dragleave", () => {
+  logoDragDepth = Math.max(0, logoDragDepth - 1);
+  if (logoDragDepth === 0) elements.logoDropZone.classList.remove("drag-active");
+});
+
+elements.logoDropZone.addEventListener("dragend", () => {
+  logoDragDepth = 0;
+  elements.logoDropZone.classList.remove("drag-active");
+});
+
+elements.logoDropZone.addEventListener("drop", async (event) => {
+  event.preventDefault();
+  logoDragDepth = 0;
+  elements.logoDropZone.classList.remove("drag-active");
+  const [file] = event.dataTransfer?.files || [];
+  await handleLogoFile(file);
+});
+
+elements.removeLogo.addEventListener("click", (event) => {
+  event.stopPropagation();
+  clearLogo();
+});
+
+elements.logoSize.addEventListener("input", () => {
+  state.logoSize = Number(elements.logoSize.value);
+  render();
+});
+
+elements.showLogoArea.addEventListener("change", () => {
+  state.showLogoArea = elements.showLogoArea.checked;
+  render();
+});
+
+elements.clearLogoArea.addEventListener("change", () => {
+  state.clearLogoArea = elements.clearLogoArea.checked;
+  render();
 });
 
 elements.color.addEventListener("input", () => setColor(elements.color.value));
@@ -262,11 +553,20 @@ elements.reset.addEventListener("click", () => {
   state.errorCorrection = defaults.errorCorrection;
   state.moduleStyle = defaults.moduleStyle;
   state.markerStyle = defaults.markerStyle;
+  state.moduleScale = defaults.moduleScale;
+  state.logoSize = defaults.logoSize;
+  state.showLogoArea = defaults.showLogoArea;
+  state.clearLogoArea = defaults.clearLogoArea;
   elements.url.value = defaults.url;
   elements.color.value = defaults.color;
   elements.errorCorrection.value = defaults.errorCorrection;
   elements.moduleStyle.value = defaults.moduleStyle;
   elements.markerStyle.value = defaults.markerStyle;
+  elements.moduleScale.value = defaults.moduleScale;
+  elements.logoSize.value = defaults.logoSize;
+  elements.showLogoArea.checked = defaults.showLogoArea;
+  elements.clearLogoArea.checked = defaults.clearLogoArea;
+  clearLogo(false);
   render();
 });
 
@@ -285,7 +585,12 @@ function buildSvg(code, size) {
   const rendering = state.moduleStyle === "square" && state.markerStyle === "square"
     ? "crispEdges"
     : "geometricPrecision";
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${dimension} ${dimension}" shape-rendering="${rendering}"><path d="${pathData}" fill="${state.color}"/>${markerData}</svg>\n`;
+  let logoData = "";
+  if (state.logoDataUrl) {
+    const box = getLogoBox(code);
+    logoData = `<image x="${formatNumber(box.x)}" y="${formatNumber(box.y)}" width="${formatNumber(box.width)}" height="${formatNumber(box.height)}" href="${state.logoDataUrl}" preserveAspectRatio="xMidYMid meet"/>`;
+  }
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${dimension} ${dimension}" shape-rendering="${rendering}"><path d="${pathData}" fill="${state.color}"/>${markerData}${logoData}</svg>\n`;
 }
 
 function addRoundedRectPath(context, x, y, width, height, radius) {
@@ -302,21 +607,24 @@ function addRoundedRectPath(context, x, y, width, height, radius) {
 }
 
 function addCanvasModule(context, left, top, moduleSize) {
+  const scale = state.moduleScale / 100;
+  const renderedSize = moduleSize * scale;
+  const inset = (moduleSize - renderedSize) / 2;
+
   if (state.moduleStyle === "dots") {
-    context.moveTo(left + moduleSize * .92, top + moduleSize * .5);
-    context.arc(left + moduleSize * .5, top + moduleSize * .5, moduleSize * .42, 0, Math.PI * 2);
+    context.moveTo(left + moduleSize * .5 + renderedSize * .5, top + moduleSize * .5);
+    context.arc(left + moduleSize * .5, top + moduleSize * .5, renderedSize * .5, 0, Math.PI * 2);
     return;
   }
 
-  const inset = state.moduleStyle === "rounded" ? .07 : .03;
-  const radius = state.moduleStyle === "rounded" ? .3 : .16;
+  const radius = state.moduleStyle === "rounded" ? renderedSize * .35 : renderedSize * .16;
   addRoundedRectPath(
     context,
-    left + moduleSize * inset,
-    top + moduleSize * inset,
-    moduleSize * (1 - inset * 2),
-    moduleSize * (1 - inset * 2),
-    moduleSize * radius,
+    left + inset,
+    top + inset,
+    renderedSize,
+    renderedSize,
+    radius,
   );
 }
 
@@ -382,6 +690,7 @@ function drawQrToCanvas(context, code, size) {
   const integerModuleSize = Math.floor(size / dimension);
   const moduleSize = integerModuleSize || size / dimension;
   const offset = integerModuleSize ? Math.floor((size - moduleSize * dimension) / 2) : 0;
+  const exclusionBox = state.clearLogoArea ? getLogoBox(code, quietZone) : null;
 
   context.clearRect(0, 0, size, size);
   context.fillStyle = state.color;
@@ -390,14 +699,26 @@ function drawQrToCanvas(context, code, size) {
 
   for (let row = 0; row < count; row += 1) {
     for (let column = 0; column < count; column += 1) {
-      if (!code.isDark(row, column) || isMarkerModule(row, column, count)) continue;
+      if (
+        !code.isDark(row, column)
+        || isMarkerModule(row, column, count)
+        || moduleIntersectsBox(row, column, quietZone, exclusionBox)
+      ) continue;
       const left = offset + (column + quietZone) * moduleSize;
       const top = offset + (row + quietZone) * moduleSize;
 
       if (state.moduleStyle === "square") {
-        const right = offset + Math.round((column + quietZone + 1) * moduleSize);
-        const bottom = offset + Math.round((row + quietZone + 1) * moduleSize);
-        context.fillRect(Math.round(left), Math.round(top), right - Math.round(left), bottom - Math.round(top));
+        if (state.moduleScale === 100) {
+          const roundedLeft = Math.round(left);
+          const roundedTop = Math.round(top);
+          const right = offset + Math.round((column + quietZone + 1) * moduleSize);
+          const bottom = offset + Math.round((row + quietZone + 1) * moduleSize);
+          context.fillRect(roundedLeft, roundedTop, right - roundedLeft, bottom - roundedTop);
+        } else {
+          const renderedSize = moduleSize * (state.moduleScale / 100);
+          const inset = (moduleSize - renderedSize) / 2;
+          context.fillRect(left + inset, top + inset, renderedSize, renderedSize);
+        }
       } else {
         addCanvasModule(context, left, top, moduleSize);
       }
@@ -406,6 +727,17 @@ function drawQrToCanvas(context, code, size) {
 
   if (state.moduleStyle !== "square") context.fill();
   drawCanvasMarkers(context, code, moduleSize, offset, quietZone);
+
+  if (state.logoImage) {
+    const box = getLogoBox(code, quietZone);
+    context.drawImage(
+      state.logoImage,
+      offset + box.x * moduleSize,
+      offset + box.y * moduleSize,
+      box.width * moduleSize,
+      box.height * moduleSize,
+    );
+  }
 }
 
 function downloadFile(blob, filename) {

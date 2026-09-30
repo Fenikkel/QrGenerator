@@ -65,6 +65,11 @@
             </label>
           </div>
 
+          <label class="range-field module-size-field" for="moduleScale">
+            <span>Module size <output id="moduleScaleValue">100%</output></span>
+            <input id="moduleScale" type="range" min="70" max="100" value="100">
+          </label>
+
           <div class="color-controls">
             <div class="color-field">
               <label for="qrColor">Color</label>
@@ -73,6 +78,37 @@
                 <input id="qrColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Hex color value">
               </span>
             </div>
+          </div>
+
+          <div class="logo-controls">
+            <div class="logo-title">Logo</div>
+            <div id="logoDropZone" class="logo-upload-row" role="button" tabindex="0" aria-label="Upload SVG logo" aria-describedby="logoError">
+              <input id="logoInput" class="visually-hidden" type="file" accept=".svg,image/svg+xml">
+              <span id="logoFileName" class="logo-file-name">SVG · Max 5 MB</span>
+              <button id="removeLogo" class="remove-logo" type="button" aria-label="Remove logo" title="Remove logo" hidden>&times;</button>
+            </div>
+            <p id="logoError" class="field-help error" role="alert" hidden></p>
+
+            <label class="range-field logo-size-field" for="logoSize">
+              <span>Area size <output id="logoSizeValue">20%</output></span>
+              <input id="logoSize" type="range" min="10" max="30" value="20">
+            </label>
+
+            <label class="toggle-field" for="showLogoArea">
+              <span>Show area</span>
+              <span class="toggle-switch">
+                <input id="showLogoArea" type="checkbox">
+                <span class="toggle-track" aria-hidden="true"></span>
+              </span>
+            </label>
+
+            <label class="toggle-field" for="clearLogoArea">
+              <span>Clear area</span>
+              <span class="toggle-switch">
+                <input id="clearLogoArea" type="checkbox">
+                <span class="toggle-track" aria-hidden="true"></span>
+              </span>
+            </label>
           </div>
 
           <div class="export-row">
