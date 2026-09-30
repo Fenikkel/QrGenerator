@@ -1,5 +1,6 @@
 const defaults = {
-  url: "https://example.com",
+  prefix: "https://",
+  url: "example.com",
   color: "#202020",
   errorCorrection: "M",
   moduleStyle: "square",
@@ -22,6 +23,9 @@ const state = {
 
 const elements = {
   preview: document.querySelector("#qrPreview"),
+  prefix: document.querySelector("#prefixSelect"),
+  prefixText: document.querySelector("#prefixText"),
+  urlInputWrap: document.querySelector("#urlInputWrap"),
   url: document.querySelector("#urlInput"),
   urlHelp: document.querySelector("#urlHelp"),
   errorCorrection: document.querySelector("#errorCorrection"),
@@ -53,19 +57,41 @@ const QUIET_ZONE = 4;
 let toastTimer;
 let logoDragDepth = 0;
 
-function parseLink(value) {
+function parseLink(value, prefix) {
   const trimmed = value.trim();
   if (!trimmed) return { empty: true };
 
-  const candidate = /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const candidate = `${prefix}${trimmed}`;
+
+  if (!prefix) return { value: trimmed };
+
+  if (prefix === "mailto:") {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return { error: "Enter a valid email address." };
+    return { value: candidate };
+  }
+
+  if (prefix === "tel:" || prefix === "sms:") {
+    if (!/\d/.test(trimmed) || !/^\+?[\d\s().-]+$/.test(trimmed)) return { error: "Enter a valid phone number." };
+    return { value: candidate };
+  }
 
   try {
     const parsed = new URL(candidate);
-    if (!["http:", "https:"].includes(parsed.protocol) || !parsed.hostname) throw new Error("Invalid link");
+    if (`${parsed.protocol}//` !== prefix || !parsed.hostname) throw new Error("Invalid link");
     return { value: parsed.href };
   } catch {
-    return { error: "Enter a valid link." };
+    return { error: "Enter a valid web address without the prefix." };
   }
+}
+
+function updatePrefixField() {
+  const selected = elements.prefix.selectedOptions[0];
+  const prefix = elements.prefix.value;
+  elements.prefixText.textContent = prefix;
+  elements.prefixText.hidden = !prefix;
+  elements.url.placeholder = selected.dataset.placeholder;
+  elements.url.inputMode = selected.dataset.inputmode;
+  elements.url.autocomplete = selected.dataset.autocomplete;
 }
 
 function createQr(value) {
@@ -352,19 +378,20 @@ function clearPreview() {
 function setValidation(message = "") {
   const hasError = Boolean(message);
   elements.url.setAttribute("aria-invalid", String(hasError));
+  elements.urlInputWrap.classList.toggle("has-error", hasError);
   elements.urlHelp.textContent = message;
   elements.urlHelp.hidden = !hasError;
   elements.urlHelp.classList.toggle("error", hasError);
 }
 
 function render() {
-  const result = parseLink(elements.url.value);
+  const result = parseLink(elements.url.value, elements.prefix.value);
   const circuitSelected = state.moduleStyle === "circuit";
   elements.colorValue.value = state.color.toUpperCase();
+  elements.moduleScaleField.hidden = circuitSelected;
   elements.moduleScale.disabled = circuitSelected;
-  elements.moduleScale.value = circuitSelected ? 100 : state.moduleScale;
-  elements.moduleScaleValue.textContent = `${circuitSelected ? 100 : state.moduleScale}%`;
-  elements.moduleScaleField.classList.toggle("is-disabled", circuitSelected);
+  elements.moduleScale.value = state.moduleScale;
+  elements.moduleScaleValue.textContent = `${state.moduleScale}%`;
   elements.logoSizeValue.textContent = `${state.logoSize}%`;
 
   if (result.empty) {
@@ -551,6 +578,10 @@ function clearLogo(renderAfter = true) {
 }
 
 elements.url.addEventListener("input", render);
+elements.prefix.addEventListener("change", () => {
+  updatePrefixField();
+  render();
+});
 elements.errorCorrection.addEventListener("change", () => {
   state.errorCorrection = elements.errorCorrection.value;
   render();
@@ -669,6 +700,7 @@ elements.reset.addEventListener("click", () => {
   state.logoSize = defaults.logoSize;
   state.showLogoArea = defaults.showLogoArea;
   state.clearLogoArea = defaults.clearLogoArea;
+  elements.prefix.value = defaults.prefix;
   elements.url.value = defaults.url;
   elements.color.value = defaults.color;
   elements.errorCorrection.value = defaults.errorCorrection;
@@ -678,6 +710,7 @@ elements.reset.addEventListener("click", () => {
   elements.logoSize.value = defaults.logoSize;
   elements.showLogoArea.checked = defaults.showLogoArea;
   elements.clearLogoArea.checked = defaults.clearLogoArea;
+  updatePrefixField();
   clearLogo(false);
   render();
 });
@@ -942,4 +975,5 @@ elements.download.addEventListener("click", () => {
   }, "image/png");
 });
 
+updatePrefixField();
 render();

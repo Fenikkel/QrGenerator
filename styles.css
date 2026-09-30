@@ -119,20 +119,43 @@ h1 { margin: 0; font-size: 1.35rem; line-height: 1.2; }
   font-weight: 600;
 }
 
-.url-field input {
+.url-field { margin-top: 16px; }
+
+.url-input-wrap {
   width: 100%;
   height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   padding: 0 12px;
   border: 1px solid var(--border);
+  background: var(--background);
+}
+
+.url-prefix {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: .9rem;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.url-input-wrap input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
   border-radius: 0;
   outline: 0;
-  background: var(--background);
+  background: transparent;
   color: var(--text);
 }
 
-.url-field input:hover { border-color: var(--text); }
-.url-field input:focus { border-color: var(--text); box-shadow: inset 0 -2px var(--text); }
-.url-field input[aria-invalid="true"] { border-color: var(--error); box-shadow: inset 0 -2px var(--error); }
+.url-input-wrap:hover { border-color: var(--text); }
+.url-input-wrap:focus-within { border-color: var(--text); box-shadow: inset 0 -2px var(--text); }
+.url-input-wrap.has-error { border-color: var(--error); box-shadow: inset 0 -2px var(--error); }
+.url-input-wrap input:focus-visible { outline: 0; }
 
 .field-help {
   margin: 7px 0 0;
@@ -198,8 +221,6 @@ input[type="color"]::-webkit-color-swatch { border: 1px solid var(--text); borde
 
 .range-field { display: block; }
 .range-field output { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
-.range-field.is-disabled > span { color: var(--muted); }
-.range-field.is-disabled input[type="range"] { opacity: .35; cursor: not-allowed; }
 
 input[type="range"] {
   width: 100%;
