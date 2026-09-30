@@ -29,24 +29,27 @@
 
         <section class="controls" aria-label="Controls">
           <label class="field prefix-field" for="prefixSelect">
-            <span>Prefix</span>
+            <span>Type</span>
             <select id="prefixSelect">
-              <option value="https://" data-placeholder="example.com" data-inputmode="url" data-autocomplete="url" selected>Web secure</option>
+              <option value="" data-placeholder="Text or address" data-inputmode="text" data-autocomplete="off" selected>Text</option>
+              <option value="https://" data-placeholder="example.com" data-inputmode="url" data-autocomplete="url">Web secure</option>
               <option value="http://" data-placeholder="example.com" data-inputmode="url" data-autocomplete="url">Web</option>
               <option value="mailto:" data-placeholder="name@example.com" data-inputmode="email" data-autocomplete="email">Email</option>
               <option value="tel:" data-placeholder="+34 600 000 000" data-inputmode="tel" data-autocomplete="tel">Phone</option>
               <option value="sms:" data-placeholder="+34 600 000 000" data-inputmode="tel" data-autocomplete="tel">SMS</option>
-              <option value="" data-placeholder="Text or address" data-inputmode="text" data-autocomplete="off">No prefix</option>
             </select>
           </label>
 
-          <label class="field url-field" for="urlInput">
-            <span>Link or content</span>
+          <div class="field url-field">
+            <label class="field-label" for="urlInput">Content</label>
             <span id="urlInputWrap" class="url-input-wrap">
-              <span id="prefixText" class="url-prefix">https://</span>
+              <span id="prefixGroup" class="url-prefix-group" hidden>
+                <span id="prefixText" class="url-prefix"></span>
+                <button id="removePrefix" class="remove-prefix" type="button" aria-label="Remove prefix" title="Remove prefix">&times;</button>
+              </span>
               <input id="urlInput" type="text" value="example.com" placeholder="example.com" inputmode="url" autocomplete="url" spellcheck="false" aria-describedby="prefixText urlHelp">
             </span>
-          </label>
+          </div>
           <p id="urlHelp" class="field-help" aria-live="polite" hidden></p>
 
           <label class="field select-field" for="errorCorrection">

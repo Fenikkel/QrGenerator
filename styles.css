@@ -109,6 +109,7 @@ h1 { margin: 0; font-size: 1.35rem; line-height: 1.2; }
 .field { display: block; }
 
 .field > span:first-child,
+.field > .field-label,
 .range-field > span,
 .color-field > label {
   display: flex;
@@ -126,25 +127,49 @@ h1 { margin: 0; font-size: 1.35rem; line-height: 1.2; }
   height: 48px;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 12px;
+  padding: 0;
   border: 1px solid var(--border);
   background: var(--background);
 }
 
-.url-prefix {
+.url-prefix-group {
+  align-self: stretch;
+  display: flex;
   flex: 0 0 auto;
+  align-items: stretch;
+  border-right: 1px solid var(--soft-border);
+  background: #f5f5f5;
+}
+
+.url-prefix {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 0 10px;
   color: var(--muted);
   font-size: .9rem;
   white-space: nowrap;
   user-select: none;
 }
 
+.remove-prefix {
+  width: 36px;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--soft-border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.remove-prefix:hover { background: var(--text); color: var(--background); }
+
 .url-input-wrap input {
   width: 100%;
   min-width: 0;
   height: 100%;
-  padding: 0;
+  padding: 0 12px;
   border: 0;
   border-radius: 0;
   outline: 0;

@@ -1,5 +1,5 @@
 const defaults = {
-  prefix: "https://",
+  prefix: "",
   url: "example.com",
   color: "#202020",
   errorCorrection: "M",
@@ -24,7 +24,9 @@ const state = {
 const elements = {
   preview: document.querySelector("#qrPreview"),
   prefix: document.querySelector("#prefixSelect"),
+  prefixGroup: document.querySelector("#prefixGroup"),
   prefixText: document.querySelector("#prefixText"),
+  removePrefix: document.querySelector("#removePrefix"),
   urlInputWrap: document.querySelector("#urlInputWrap"),
   url: document.querySelector("#urlInput"),
   urlHelp: document.querySelector("#urlHelp"),
@@ -88,7 +90,7 @@ function updatePrefixField() {
   const selected = elements.prefix.selectedOptions[0];
   const prefix = elements.prefix.value;
   elements.prefixText.textContent = prefix;
-  elements.prefixText.hidden = !prefix;
+  elements.prefixGroup.hidden = !prefix;
   elements.url.placeholder = selected.dataset.placeholder;
   elements.url.inputMode = selected.dataset.inputmode;
   elements.url.autocomplete = selected.dataset.autocomplete;
@@ -581,6 +583,12 @@ elements.url.addEventListener("input", render);
 elements.prefix.addEventListener("change", () => {
   updatePrefixField();
   render();
+});
+elements.removePrefix.addEventListener("click", () => {
+  elements.prefix.value = "";
+  updatePrefixField();
+  render();
+  elements.url.focus();
 });
 elements.errorCorrection.addEventListener("change", () => {
   state.errorCorrection = elements.errorCorrection.value;
