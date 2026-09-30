@@ -198,6 +198,8 @@ input[type="color"]::-webkit-color-swatch { border: 1px solid var(--text); borde
 
 .range-field { display: block; }
 .range-field output { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.range-field.is-disabled > span { color: var(--muted); }
+.range-field.is-disabled input[type="range"] { opacity: .35; cursor: not-allowed; }
 
 input[type="range"] {
   width: 100%;

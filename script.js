@@ -27,6 +27,7 @@ const elements = {
   errorCorrection: document.querySelector("#errorCorrection"),
   moduleStyle: document.querySelector("#moduleStyle"),
   markerStyle: document.querySelector("#markerStyle"),
+  moduleScaleField: document.querySelector(".module-size-field"),
   moduleScale: document.querySelector("#moduleScale"),
   moduleScaleValue: document.querySelector("#moduleScaleValue"),
   color: document.querySelector("#qrColor"),
@@ -98,8 +99,14 @@ function circleCommand(centerX, centerY, radius) {
   return `M${right} ${center}A${r} ${r} 0 1 1 ${left} ${center}A${r} ${r} 0 1 1 ${right} ${center}Z`;
 }
 
+function getModuleScale(style = state.moduleStyle) {
+  const scale = state.moduleScale / 100;
+  // Circular modules need a small permanent gap so adjacent dots never merge.
+  return style === "dots" ? scale * .9 : scale;
+}
+
 function moduleCommand(x, y, style) {
-  const size = state.moduleScale / 100;
+  const size = getModuleScale(style);
   const inset = (1 - size) / 2;
   const left = x + inset;
   const top = y + inset;
@@ -119,15 +126,91 @@ function isMarkerModule(row, column, count) {
   return (inTop && (inLeft || inRight)) || (inBottom && inLeft);
 }
 
-function moduleIntersectsBox(row, column, quietZone, box) {
+function getCircuitWidth() {
+  return 1;
+}
+
+function moduleIntersectsBox(row, column, quietZone, box, style = state.moduleStyle) {
   if (!box) return false;
-  const size = state.moduleScale / 100;
+  const size = style === "circuit" ? getCircuitWidth() : getModuleScale(style);
   const inset = (1 - size) / 2;
   const left = column + quietZone + inset;
   const top = row + quietZone + inset;
-  const right = left + size;
-  const bottom = top + size;
-  return right > box.x && left < box.x + box.width && bottom > box.y && top < box.y + box.height;
+  return rectangleIntersectsBox(left, top, size, size, box);
+}
+
+function rectangleIntersectsBox(left, top, width, height, box) {
+  if (!box) return false;
+  return left + width > box.x
+    && left < box.x + box.width
+    && top + height > box.y
+    && top < box.y + box.height;
+}
+
+function shouldRenderModule(code, row, column, quietZone, exclusionBox, style = state.moduleStyle) {
+  const count = code.getModuleCount();
+  if (row < 0 || column < 0 || row >= count || column >= count) return false;
+  return code.isDark(row, column)
+    && !isMarkerModule(row, column, count)
+    && !moduleIntersectsBox(row, column, quietZone, exclusionBox, style);
+}
+
+function circuitSegmentIntersectsBox(x1, y1, x2, y2, width, box) {
+  if (!box) return false;
+  const radius = width / 2;
+  const left = Math.min(x1, x2) - radius;
+  const top = Math.min(y1, y2) - radius;
+  const segmentWidth = Math.abs(x2 - x1) + width;
+  const segmentHeight = Math.abs(y2 - y1) + width;
+  return rectangleIntersectsBox(left, top, segmentWidth, segmentHeight, box);
+}
+
+function getCircuitGeometry(code, quietZone = QUIET_ZONE) {
+  const count = code.getModuleCount();
+  const width = getCircuitWidth();
+  const exclusionBox = state.clearLogoArea ? getLogoBox(code, quietZone) : null;
+  const segments = [];
+  const dots = [];
+
+  const hasConnection = (row, column, nextRow, nextColumn) => {
+    if (!shouldRenderModule(code, row, column, quietZone, exclusionBox, "circuit")) return false;
+    if (!shouldRenderModule(code, nextRow, nextColumn, quietZone, exclusionBox, "circuit")) return false;
+    const x1 = column + quietZone + .5;
+    const y1 = row + quietZone + .5;
+    const x2 = nextColumn + quietZone + .5;
+    const y2 = nextRow + quietZone + .5;
+    return !circuitSegmentIntersectsBox(x1, y1, x2, y2, width, exclusionBox);
+  };
+
+  for (let row = 0; row < count; row += 1) {
+    for (let column = 0; column < count; column += 1) {
+      if (!shouldRenderModule(code, row, column, quietZone, exclusionBox, "circuit")) continue;
+      const x = column + quietZone + .5;
+      const y = row + quietZone + .5;
+      const right = hasConnection(row, column, row, column + 1);
+      const down = hasConnection(row, column, row + 1, column);
+      const connectionCount = Number(right)
+        + Number(down)
+        + Number(hasConnection(row, column, row, column - 1))
+        + Number(hasConnection(row, column, row - 1, column));
+
+      if (right) segments.push({ x1: x, y1: y, x2: x + 1, y2: y });
+      if (down) segments.push({ x1: x, y1: y, x2: x, y2: y + 1 });
+      if (connectionCount === 0) dots.push({ x, y });
+    }
+  }
+
+  return { segments, dots, width };
+}
+
+function circuitTrackPath(geometry) {
+  return geometry.segments.map(({ x1, y1, x2, y2 }) => (
+    `M${formatNumber(x1)} ${formatNumber(y1)}L${formatNumber(x2)} ${formatNumber(y2)}`
+  )).join("");
+}
+
+function circuitDotPath(geometry) {
+  return geometry.dots.map(({ x, y }) => circleCommand(x, y, geometry.width / 2)).join("");
 }
 
 function modulesToPath(code, quietZone = QUIET_ZONE, style = state.moduleStyle) {
@@ -137,13 +220,10 @@ function modulesToPath(code, quietZone = QUIET_ZONE, style = state.moduleStyle) 
 
   for (let row = 0; row < count; row += 1) {
     for (let column = 0; column < count; column += 1) {
-      if (
-        code.isDark(row, column)
-        && !isMarkerModule(row, column, count)
-        && !moduleIntersectsBox(row, column, quietZone, exclusionBox)
-      ) {
-        commands.push(moduleCommand(column + quietZone, row + quietZone, style));
-      }
+      if (!shouldRenderModule(code, row, column, quietZone, exclusionBox, style)) continue;
+      const x = column + quietZone;
+      const y = row + quietZone;
+      commands.push(moduleCommand(x, y, style));
     }
   }
 
@@ -162,6 +242,37 @@ function markerPositions(code, quietZone = QUIET_ZONE) {
 function setAttributes(node, attributes) {
   Object.entries(attributes).forEach(([name, value]) => node.setAttribute(name, value));
   return node;
+}
+
+function appendSvgModules(svg, code) {
+  if (state.moduleStyle === "circuit") {
+    const geometry = getCircuitGeometry(code);
+    const trackData = circuitTrackPath(geometry);
+    const dotData = circuitDotPath(geometry);
+
+    if (trackData) {
+      svg.append(setAttributes(document.createElementNS(SVG_NAMESPACE, "path"), {
+        d: trackData,
+        fill: "none",
+        stroke: state.color,
+        "stroke-width": formatNumber(geometry.width),
+        "stroke-linecap": "round",
+        "stroke-linejoin": "round",
+      }));
+    }
+    if (dotData) {
+      svg.append(setAttributes(document.createElementNS(SVG_NAMESPACE, "path"), {
+        d: dotData,
+        fill: state.color,
+      }));
+    }
+    return;
+  }
+
+  svg.append(setAttributes(document.createElementNS(SVG_NAMESPACE, "path"), {
+    d: modulesToPath(code),
+    fill: state.color,
+  }));
 }
 
 function appendSvgMarkers(svg, code) {
@@ -248,8 +359,12 @@ function setValidation(message = "") {
 
 function render() {
   const result = parseLink(elements.url.value);
+  const circuitSelected = state.moduleStyle === "circuit";
   elements.colorValue.value = state.color.toUpperCase();
-  elements.moduleScaleValue.textContent = `${state.moduleScale}%`;
+  elements.moduleScale.disabled = circuitSelected;
+  elements.moduleScale.value = circuitSelected ? 100 : state.moduleScale;
+  elements.moduleScaleValue.textContent = `${circuitSelected ? 100 : state.moduleScale}%`;
+  elements.moduleScaleField.classList.toggle("is-disabled", circuitSelected);
   elements.logoSizeValue.textContent = `${state.logoSize}%`;
 
   if (result.empty) {
@@ -284,11 +399,8 @@ function render() {
 
   setValidation();
   const dimension = state.qr.getModuleCount() + QUIET_ZONE * 2;
-  const path = document.createElementNS(SVG_NAMESPACE, "path");
-  path.setAttribute("d", modulesToPath(state.qr));
-  path.setAttribute("fill", state.color);
-
-  elements.preview.replaceChildren(path);
+  elements.preview.replaceChildren();
+  appendSvgModules(elements.preview, state.qr);
   appendSvgMarkers(elements.preview, state.qr);
   appendSvgLogo(elements.preview, state.qr);
   appendSvgLogoGuide(elements.preview, state.qr);
@@ -572,7 +684,15 @@ elements.reset.addEventListener("click", () => {
 
 function buildSvg(code, size) {
   const dimension = code.getModuleCount() + QUIET_ZONE * 2;
-  const pathData = modulesToPath(code);
+  let moduleData;
+  if (state.moduleStyle === "circuit") {
+    const geometry = getCircuitGeometry(code);
+    const trackData = circuitTrackPath(geometry);
+    const dotData = circuitDotPath(geometry);
+    moduleData = `${trackData ? `<path d="${trackData}" fill="none" stroke="${state.color}" stroke-width="${formatNumber(geometry.width)}" stroke-linecap="round" stroke-linejoin="round"/>` : ""}${dotData ? `<path d="${dotData}" fill="${state.color}"/>` : ""}`;
+  } else {
+    moduleData = `<path d="${modulesToPath(code)}" fill="${state.color}"/>`;
+  }
   const markerData = markerPositions(code).map(([x, y]) => {
     if (state.markerStyle === "circle") {
       return `<circle cx="${x + 3.5}" cy="${y + 3.5}" r="3" fill="none" stroke="${state.color}" stroke-width="1"/><circle cx="${x + 3.5}" cy="${y + 3.5}" r="1.5" fill="${state.color}"/>`;
@@ -590,7 +710,7 @@ function buildSvg(code, size) {
     const box = getLogoBox(code);
     logoData = `<image x="${formatNumber(box.x)}" y="${formatNumber(box.y)}" width="${formatNumber(box.width)}" height="${formatNumber(box.height)}" href="${state.logoDataUrl}" preserveAspectRatio="xMidYMid meet"/>`;
   }
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${dimension} ${dimension}" shape-rendering="${rendering}"><path d="${pathData}" fill="${state.color}"/>${markerData}${logoData}</svg>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${dimension} ${dimension}" shape-rendering="${rendering}">${moduleData}${markerData}${logoData}</svg>\n`;
 }
 
 function addRoundedRectPath(context, x, y, width, height, radius) {
@@ -607,7 +727,7 @@ function addRoundedRectPath(context, x, y, width, height, radius) {
 }
 
 function addCanvasModule(context, left, top, moduleSize) {
-  const scale = state.moduleScale / 100;
+  const scale = getModuleScale();
   const renderedSize = moduleSize * scale;
   const inset = (moduleSize - renderedSize) / 2;
 
@@ -626,6 +746,38 @@ function addCanvasModule(context, left, top, moduleSize) {
     renderedSize,
     radius,
   );
+}
+
+function drawCanvasCircuit(context, geometry, moduleSize, offset) {
+  context.save();
+  context.strokeStyle = state.color;
+  context.fillStyle = state.color;
+  context.lineWidth = geometry.width * moduleSize;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+
+  if (geometry.segments.length) {
+    context.beginPath();
+    geometry.segments.forEach(({ x1, y1, x2, y2 }) => {
+      context.moveTo(offset + x1 * moduleSize, offset + y1 * moduleSize);
+      context.lineTo(offset + x2 * moduleSize, offset + y2 * moduleSize);
+    });
+    context.stroke();
+  }
+
+  if (geometry.dots.length) {
+    context.beginPath();
+    geometry.dots.forEach(({ x, y }) => {
+      const centerX = offset + x * moduleSize;
+      const centerY = offset + y * moduleSize;
+      const radius = geometry.width * moduleSize / 2;
+      context.moveTo(centerX + radius, centerY);
+      context.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    });
+    context.fill();
+  }
+
+  context.restore();
 }
 
 function drawCanvasMarkers(context, code, moduleSize, offset, quietZone) {
@@ -695,37 +847,38 @@ function drawQrToCanvas(context, code, size) {
   context.clearRect(0, 0, size, size);
   context.fillStyle = state.color;
 
-  if (state.moduleStyle !== "square") context.beginPath();
+  if (state.moduleStyle === "circuit") {
+    drawCanvasCircuit(context, getCircuitGeometry(code, quietZone), moduleSize, offset);
+  } else {
+    if (state.moduleStyle !== "square") context.beginPath();
 
-  for (let row = 0; row < count; row += 1) {
-    for (let column = 0; column < count; column += 1) {
-      if (
-        !code.isDark(row, column)
-        || isMarkerModule(row, column, count)
-        || moduleIntersectsBox(row, column, quietZone, exclusionBox)
-      ) continue;
-      const left = offset + (column + quietZone) * moduleSize;
-      const top = offset + (row + quietZone) * moduleSize;
+    for (let row = 0; row < count; row += 1) {
+      for (let column = 0; column < count; column += 1) {
+        if (!shouldRenderModule(code, row, column, quietZone, exclusionBox)) continue;
+        const left = offset + (column + quietZone) * moduleSize;
+        const top = offset + (row + quietZone) * moduleSize;
 
-      if (state.moduleStyle === "square") {
-        if (state.moduleScale === 100) {
-          const roundedLeft = Math.round(left);
-          const roundedTop = Math.round(top);
-          const right = offset + Math.round((column + quietZone + 1) * moduleSize);
-          const bottom = offset + Math.round((row + quietZone + 1) * moduleSize);
-          context.fillRect(roundedLeft, roundedTop, right - roundedLeft, bottom - roundedTop);
+        if (state.moduleStyle === "square") {
+          if (state.moduleScale === 100) {
+            const roundedLeft = Math.round(left);
+            const roundedTop = Math.round(top);
+            const right = offset + Math.round((column + quietZone + 1) * moduleSize);
+            const bottom = offset + Math.round((row + quietZone + 1) * moduleSize);
+            context.fillRect(roundedLeft, roundedTop, right - roundedLeft, bottom - roundedTop);
+          } else {
+            const renderedSize = moduleSize * (state.moduleScale / 100);
+            const inset = (moduleSize - renderedSize) / 2;
+            context.fillRect(left + inset, top + inset, renderedSize, renderedSize);
+          }
         } else {
-          const renderedSize = moduleSize * (state.moduleScale / 100);
-          const inset = (moduleSize - renderedSize) / 2;
-          context.fillRect(left + inset, top + inset, renderedSize, renderedSize);
+          addCanvasModule(context, left, top, moduleSize);
         }
-      } else {
-        addCanvasModule(context, left, top, moduleSize);
       }
     }
+
+    if (state.moduleStyle !== "square") context.fill();
   }
 
-  if (state.moduleStyle !== "square") context.fill();
   drawCanvasMarkers(context, code, moduleSize, offset, quietZone);
 
   if (state.logoImage) {
