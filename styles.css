@@ -216,7 +216,7 @@ h1 { margin: 0; font-size: 1.35rem; line-height: 1.2; }
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 5px 0;
+  gap: 5px 16px;
   margin-top: 6px;
   color: var(--muted);
   font-size: .68rem;
@@ -225,11 +225,13 @@ h1 { margin: 0; font-size: 1.35rem; line-height: 1.2; }
 }
 
 .qr-version-info span { white-space: nowrap; }
-.qr-version-info span + span {
-  margin-left: 14px;
-  padding-left: 14px;
-  border-left: 1px solid var(--soft-border);
+.qr-version-info .version-separator {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
 }
+
+.qr-version-info .version-arrow { font-weight: 700; }
 
 .field-help {
   margin: 7px 0 0;

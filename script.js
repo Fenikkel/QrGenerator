@@ -154,12 +154,28 @@ function updateVersionInfo(code, value, mode) {
     elements.previousVersion.textContent = "Minimum version";
   } else {
     const previousCapacity = getQrCapacity(version - 1, mode, state.errorCorrection);
-    elements.previousVersion.textContent = `−${formatUnits(units - previousCapacity, mode)} → V${version - 1}`;
+    const previousArrow = document.createElement("strong");
+    previousArrow.className = "version-arrow";
+    previousArrow.textContent = "←";
+    elements.previousVersion.replaceChildren(
+      `V${version - 1} `,
+      previousArrow,
+      ` −${formatUnits(units - previousCapacity, mode)}`,
+    );
   }
 
-  elements.nextVersion.textContent = version === 40
-    ? "Maximum version"
-    : `+${formatUnits(nextAmount, mode)} → V${version + 1}`;
+  if (version === 40) {
+    elements.nextVersion.textContent = "Maximum version";
+  } else {
+    const nextArrow = document.createElement("strong");
+    nextArrow.className = "version-arrow";
+    nextArrow.textContent = "→";
+    elements.nextVersion.replaceChildren(
+      `+${formatUnits(nextAmount, mode)} `,
+      nextArrow,
+      ` V${version + 1}`,
+    );
+  }
 
   elements.qrVersionInfo.setAttribute(
     "aria-label",
