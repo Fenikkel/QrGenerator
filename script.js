@@ -134,6 +134,7 @@ function formatUnits(amount, mode) {
 function updateVersionInfo(code, value, mode) {
   if (!code || !mode) {
     elements.qrVersionInfo.hidden = true;
+    elements.qrVersionLabel.hidden = true;
     return;
   }
 
@@ -144,6 +145,7 @@ function updateVersionInfo(code, value, mode) {
   const nextAmount = currentCapacity - units + 1;
 
   elements.qrVersionInfo.hidden = false;
+  elements.qrVersionLabel.hidden = false;
   elements.qrVersionLabel.textContent = `V${version} · ${moduleCount}×${moduleCount}`;
 
   if (version === 1) {

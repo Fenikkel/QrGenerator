@@ -23,9 +23,12 @@
       </header>
 
       <div class="workspace">
-        <section id="canvasArea" class="canvas-area" aria-label="QR code preview">
-          <svg id="qrPreview" role="img" aria-label="Generated QR code"></svg>
-        </section>
+        <div class="preview-column">
+          <section id="canvasArea" class="canvas-area" aria-label="QR code preview">
+            <svg id="qrPreview" role="img" aria-label="Generated QR code"></svg>
+          </section>
+          <div id="qrVersionLabel" class="qr-version-label" aria-live="polite">V1 · 21×21</div>
+        </div>
 
         <section class="controls" aria-label="Controls">
           <label class="field prefix-field" for="prefixSelect">
@@ -66,7 +69,6 @@
             <span data-mode="Numeric">Numeric</span>
           </div>
           <div id="qrVersionInfo" class="qr-version-info" role="status" aria-live="polite">
-            <strong id="qrVersionLabel">V1 · 21×21</strong>
             <span id="previousVersion">Minimum version</span>
             <span id="nextVersion">+4 bytes → V2</span>
           </div>
