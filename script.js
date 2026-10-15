@@ -3,9 +3,11 @@ const defaults = {
   url: "example.com",
   color: "#202020",
   errorCorrection: "M",
-  moduleStyle: "square",
-  markerStyle: "square",
+  moduleStyle: "circuit",
+  markerStyle: "rounded",
   moduleScale: 100,
+  exportFormat: "svg",
+  exportSize: "256",
   logoSize: 20,
   showLogoArea: false,
   clearLogoArea: false,
@@ -828,6 +830,8 @@ elements.reset.addEventListener("click", () => {
   elements.moduleStyle.value = defaults.moduleStyle;
   elements.markerStyle.value = defaults.markerStyle;
   elements.moduleScale.value = defaults.moduleScale;
+  elements.exportFormat.value = defaults.exportFormat;
+  elements.exportSize.value = defaults.exportSize;
   elements.logoSize.value = defaults.logoSize;
   elements.showLogoArea.checked = defaults.showLogoArea;
   elements.clearLogoArea.checked = defaults.clearLogoArea;
