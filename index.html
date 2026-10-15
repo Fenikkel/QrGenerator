@@ -40,6 +40,16 @@
             </select>
           </label>
 
+          <label class="field select-field" for="errorCorrection">
+            <span>Error correction</span>
+            <select id="errorCorrection">
+              <option value="L">Low · 7%</option>
+              <option value="M" selected>Medium · 15%</option>
+              <option value="Q">Quartile · 25%</option>
+              <option value="H">High · 30%</option>
+            </select>
+          </label>
+
           <div class="field url-field">
             <label class="field-label" for="urlInput">Content</label>
             <span id="urlInputWrap" class="url-input-wrap">
@@ -55,17 +65,12 @@
             <span data-mode="Alphanumeric">Alphanumeric</span>
             <span data-mode="Numeric">Numeric</span>
           </div>
+          <div id="qrVersionInfo" class="qr-version-info" role="status" aria-live="polite">
+            <strong id="qrVersionLabel">V1 · 21×21</strong>
+            <span id="previousVersion">Minimum version</span>
+            <span id="nextVersion">+4 bytes → V2</span>
+          </div>
           <p id="urlHelp" class="field-help" aria-live="polite" hidden></p>
-
-          <label class="field select-field" for="errorCorrection">
-            <span>Error correction</span>
-            <select id="errorCorrection">
-              <option value="L">Low · 7%</option>
-              <option value="M" selected>Medium · 15%</option>
-              <option value="Q">Quartile · 25%</option>
-              <option value="H">High · 30%</option>
-            </select>
-          </label>
 
           <div class="style-controls">
             <label class="field" for="moduleStyle">

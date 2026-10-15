@@ -32,6 +32,10 @@ const elements = {
   urlHelp: document.querySelector("#urlHelp"),
   encodingMode: document.querySelector("#encodingMode"),
   encodingModes: document.querySelectorAll("#encodingMode [data-mode]"),
+  qrVersionInfo: document.querySelector("#qrVersionInfo"),
+  qrVersionLabel: document.querySelector("#qrVersionLabel"),
+  previousVersion: document.querySelector("#previousVersion"),
+  nextVersion: document.querySelector("#nextVersion"),
   errorCorrection: document.querySelector("#errorCorrection"),
   moduleStyle: document.querySelector("#moduleStyle"),
   markerStyle: document.querySelector("#markerStyle"),
@@ -58,8 +62,11 @@ const elements = {
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const QUIET_ZONE = 4;
+const capacityCache = new Map();
 let toastTimer;
 let logoDragDepth = 0;
+
+qrcode.stringToBytes = qrcode.stringToBytesFuncs["UTF-8"];
 
 function detectTextMode(value) {
   if (/^\d+$/.test(value)) return "Numeric";
@@ -79,6 +86,80 @@ function updateEncodingMode(mode) {
   elements.encodingMode.setAttribute(
     "aria-label",
     mode ? `Detected QR encoding: ${mode}` : "No QR encoding detected",
+  );
+}
+
+function fitsQrVersion(length, version, mode, errorCorrection) {
+  const sample = mode === "Numeric" ? "0" : mode === "Alphanumeric" ? "A" : "a";
+  try {
+    const code = qrcode(version, errorCorrection);
+    code.addData(sample.repeat(length), mode);
+    code.make();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getQrCapacity(version, mode, errorCorrection) {
+  const cacheKey = `${version}-${mode}-${errorCorrection}`;
+  if (capacityCache.has(cacheKey)) return capacityCache.get(cacheKey);
+
+  let lower = 0;
+  let upper = 1;
+  while (fitsQrVersion(upper, version, mode, errorCorrection)) {
+    lower = upper;
+    upper *= 2;
+  }
+
+  while (lower + 1 < upper) {
+    const middle = Math.floor((lower + upper) / 2);
+    if (fitsQrVersion(middle, version, mode, errorCorrection)) lower = middle;
+    else upper = middle;
+  }
+
+  capacityCache.set(cacheKey, lower);
+  return lower;
+}
+
+function getPayloadUnits(value, mode) {
+  return mode === "Byte" ? qrcode.stringToBytes(value).length : value.length;
+}
+
+function formatUnits(amount, mode) {
+  const singular = mode === "Numeric" ? "digit" : mode === "Byte" ? "byte" : "character";
+  return `${amount} ${singular}${amount === 1 ? "" : "s"}`;
+}
+
+function updateVersionInfo(code, value, mode) {
+  if (!code || !mode) {
+    elements.qrVersionInfo.hidden = true;
+    return;
+  }
+
+  const moduleCount = code.getModuleCount();
+  const version = (moduleCount - 17) / 4;
+  const units = getPayloadUnits(value, mode);
+  const currentCapacity = getQrCapacity(version, mode, state.errorCorrection);
+  const nextAmount = currentCapacity - units + 1;
+
+  elements.qrVersionInfo.hidden = false;
+  elements.qrVersionLabel.textContent = `V${version} · ${moduleCount}×${moduleCount}`;
+
+  if (version === 1) {
+    elements.previousVersion.textContent = "Minimum version";
+  } else {
+    const previousCapacity = getQrCapacity(version - 1, mode, state.errorCorrection);
+    elements.previousVersion.textContent = `−${formatUnits(units - previousCapacity, mode)} → V${version - 1}`;
+  }
+
+  elements.nextVersion.textContent = version === 40
+    ? "Maximum version"
+    : `+${formatUnits(nextAmount, mode)} → V${version + 1}`;
+
+  elements.qrVersionInfo.setAttribute(
+    "aria-label",
+    `QR version ${version}, ${moduleCount} by ${moduleCount} modules. ${elements.previousVersion.textContent}. ${elements.nextVersion.textContent}.`,
   );
 }
 
@@ -426,6 +507,7 @@ function render() {
     state.qr = null;
     state.encodedUrl = "";
     setValidation();
+    updateVersionInfo(null);
     clearPreview();
     elements.download.disabled = true;
     return;
@@ -435,6 +517,7 @@ function render() {
     state.qr = null;
     state.encodedUrl = "";
     setValidation(result.error);
+    updateVersionInfo(null);
     clearPreview();
     elements.download.disabled = true;
     return;
@@ -447,12 +530,14 @@ function render() {
     state.qr = null;
     state.encodedUrl = "";
     setValidation("The link is too long to generate a QR code.");
+    updateVersionInfo(null);
     clearPreview();
     elements.download.disabled = true;
     return;
   }
 
   setValidation();
+  updateVersionInfo(state.qr, result.value, qrMode);
   const dimension = state.qr.getModuleCount() + QUIET_ZONE * 2;
   elements.preview.replaceChildren();
   appendSvgModules(elements.preview, state.qr);
