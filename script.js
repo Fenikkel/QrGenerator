@@ -30,6 +30,8 @@ const elements = {
   urlInputWrap: document.querySelector("#urlInputWrap"),
   url: document.querySelector("#urlInput"),
   urlHelp: document.querySelector("#urlHelp"),
+  encodingMode: document.querySelector("#encodingMode"),
+  encodingModes: document.querySelectorAll("#encodingMode [data-mode]"),
   errorCorrection: document.querySelector("#errorCorrection"),
   moduleStyle: document.querySelector("#moduleStyle"),
   markerStyle: document.querySelector("#markerStyle"),
@@ -58,6 +60,27 @@ const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const QUIET_ZONE = 4;
 let toastTimer;
 let logoDragDepth = 0;
+
+function detectTextMode(value) {
+  if (/^\d+$/.test(value)) return "Numeric";
+  if (/^[0-9A-Z $%*+\-./:]+$/.test(value)) return "Alphanumeric";
+  return "Byte";
+}
+
+function getQrMode(value, prefix) {
+  if (!value) return null;
+  return prefix ? "Byte" : detectTextMode(value);
+}
+
+function updateEncodingMode(mode) {
+  elements.encodingModes.forEach((option) => {
+    option.classList.toggle("active", option.dataset.mode === mode);
+  });
+  elements.encodingMode.setAttribute(
+    "aria-label",
+    mode ? `Detected QR encoding: ${mode}` : "No QR encoding detected",
+  );
+}
 
 function parseLink(value, prefix) {
   const trimmed = value.trim();
@@ -96,9 +119,9 @@ function updatePrefixField() {
   elements.url.autocomplete = selected.dataset.autocomplete;
 }
 
-function createQr(value) {
+function createQr(value, mode) {
   const code = qrcode(0, state.errorCorrection);
-  code.addData(value, "Byte");
+  code.addData(value, mode);
   code.make();
   return code;
 }
@@ -387,8 +410,11 @@ function setValidation(message = "") {
 }
 
 function render() {
-  const result = parseLink(elements.url.value, elements.prefix.value);
+  const trimmedValue = elements.url.value.trim();
+  const qrMode = getQrMode(trimmedValue, elements.prefix.value);
+  const result = parseLink(trimmedValue, elements.prefix.value);
   const circuitSelected = state.moduleStyle === "circuit";
+  updateEncodingMode(qrMode);
   elements.colorValue.value = state.color.toUpperCase();
   elements.moduleScaleField.hidden = circuitSelected;
   elements.moduleScale.disabled = circuitSelected;
@@ -415,7 +441,7 @@ function render() {
   }
 
   try {
-    state.qr = createQr(result.value);
+    state.qr = createQr(result.value, qrMode);
     state.encodedUrl = result.value;
   } catch {
     state.qr = null;

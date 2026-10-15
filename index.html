@@ -50,6 +50,11 @@
               <input id="urlInput" type="text" value="example.com" placeholder="example.com" inputmode="url" autocomplete="url" spellcheck="false" aria-describedby="prefixText urlHelp">
             </span>
           </div>
+          <div id="encodingMode" class="encoding-mode" role="status" aria-live="polite" aria-label="Detected QR encoding: Byte">
+            <span data-mode="Byte" class="active">Byte</span>
+            <span data-mode="Alphanumeric">Alphanumeric</span>
+            <span data-mode="Numeric">Numeric</span>
+          </div>
           <p id="urlHelp" class="field-help" aria-live="polite" hidden></p>
 
           <label class="field select-field" for="errorCorrection">
