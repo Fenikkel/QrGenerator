@@ -7,27 +7,57 @@
     <meta name="description" content="QR code generator with SVG and PNG export.">
     <title>QR Generator</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=20261016-2">
     <script src="vendor/qrcode.js" defer></script>
-    <script src="script.js" defer></script>
+    <script src="script.js?v=20261016-2" defer></script>
   </head>
   <body>
     <main>
-      <header>
-        <h1>QR Generator</h1>
-        <div class="header-actions">
-          <button id="resetButton" class="icon-button" type="button" aria-label="Reset" title="Reset">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5"/></svg>
-          </button>
-        </div>
-      </header>
-
       <div class="workspace">
         <div class="preview-column">
           <section id="canvasArea" class="canvas-area" aria-label="QR code preview">
             <svg id="qrPreview" role="img" aria-label="Generated QR code"></svg>
+            <div id="qrVersionLabel" class="qr-version-label" aria-live="polite">V1 · 21×21</div>
           </section>
-          <div id="qrVersionLabel" class="qr-version-label" aria-live="polite">V1 · 21×21</div>
+          <section class="controls appearance-controls" aria-label="QR appearance">
+            <div class="style-controls">
+              <label class="field" for="markerStyle">
+                <span>Marker style</span>
+                <select id="markerStyle">
+                  <option value="square">Square</option>
+                  <option value="rounded" selected>Rounded</option>
+                  <option value="circle">Circle</option>
+                </select>
+              </label>
+
+              <label class="field" for="moduleStyle">
+                <span>Module style</span>
+                <select id="moduleStyle">
+                  <option value="square">Square</option>
+                  <option value="soft">Soft</option>
+                  <option value="rounded">Rounded</option>
+                  <option value="dots">Dots</option>
+                  <option value="circuit" selected>Circuit</option>
+                </select>
+              </label>
+
+            </div>
+
+            <label class="range-field module-size-field" for="moduleScale" hidden>
+              <span>Module size <output id="moduleScaleValue">100%</output></span>
+              <input id="moduleScale" type="range" min="70" max="100" value="100" disabled>
+            </label>
+
+            <div class="color-controls">
+              <div class="color-field">
+                <label for="qrColor">Color</label>
+                <span class="color-input-wrap">
+                  <input id="qrColor" type="color" value="#202020">
+                  <input id="qrColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Hex color value">
+                </span>
+              </div>
+            </div>
+          </section>
         </div>
 
         <section class="controls" aria-label="Controls">
@@ -74,43 +104,6 @@
             <span id="nextVersion">+4 bytes → V2</span>
           </div>
           <p id="urlHelp" class="field-help" aria-live="polite" hidden></p>
-
-          <div class="style-controls">
-            <label class="field" for="moduleStyle">
-              <span>Module style</span>
-              <select id="moduleStyle">
-                <option value="square">Square</option>
-                <option value="soft">Soft</option>
-                <option value="rounded">Rounded</option>
-                <option value="dots">Dots</option>
-                <option value="circuit" selected>Circuit</option>
-              </select>
-            </label>
-
-            <label class="field" for="markerStyle">
-              <span>Marker style</span>
-              <select id="markerStyle">
-                <option value="square">Square</option>
-                <option value="rounded" selected>Rounded</option>
-                <option value="circle">Circle</option>
-              </select>
-            </label>
-          </div>
-
-          <label class="range-field module-size-field" for="moduleScale">
-            <span>Module size <output id="moduleScaleValue">100%</output></span>
-            <input id="moduleScale" type="range" min="70" max="100" value="100">
-          </label>
-
-          <div class="color-controls">
-            <div class="color-field">
-              <label for="qrColor">Color</label>
-              <span class="color-input-wrap">
-                <input id="qrColor" type="color" value="#202020">
-                <input id="qrColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Hex color value">
-              </span>
-            </div>
-          </div>
 
           <div class="logo-controls">
             <div class="logo-title">Logo</div>

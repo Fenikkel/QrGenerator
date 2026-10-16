@@ -55,7 +55,6 @@ const elements = {
   removeLogo: document.querySelector("#removeLogo"),
   showLogoArea: document.querySelector("#showLogoArea"),
   clearLogoArea: document.querySelector("#clearLogoArea"),
-  reset: document.querySelector("#resetButton"),
   download: document.querySelector("#downloadButton"),
   exportFormat: document.querySelector("#exportFormat"),
   exportSize: document.querySelector("#exportSize"),
@@ -828,32 +827,6 @@ elements.colorValue.addEventListener("keydown", (event) => {
     elements.colorValue.value = state.color.toUpperCase();
     elements.colorValue.blur();
   }
-});
-
-elements.reset.addEventListener("click", () => {
-  state.color = defaults.color;
-  state.errorCorrection = defaults.errorCorrection;
-  state.moduleStyle = defaults.moduleStyle;
-  state.markerStyle = defaults.markerStyle;
-  state.moduleScale = defaults.moduleScale;
-  state.logoSize = defaults.logoSize;
-  state.showLogoArea = defaults.showLogoArea;
-  state.clearLogoArea = defaults.clearLogoArea;
-  elements.prefix.value = defaults.prefix;
-  elements.url.value = defaults.url;
-  elements.color.value = defaults.color;
-  elements.errorCorrection.value = defaults.errorCorrection;
-  elements.moduleStyle.value = defaults.moduleStyle;
-  elements.markerStyle.value = defaults.markerStyle;
-  elements.moduleScale.value = defaults.moduleScale;
-  elements.exportFormat.value = defaults.exportFormat;
-  elements.exportSize.value = defaults.exportSize;
-  elements.logoSize.value = defaults.logoSize;
-  elements.showLogoArea.checked = defaults.showLogoArea;
-  elements.clearLogoArea.checked = defaults.clearLogoArea;
-  updatePrefixField();
-  clearLogo(false);
-  render();
 });
 
 function buildSvg(code, size) {

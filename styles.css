@@ -38,32 +38,6 @@ select:focus-visible {
   outline-offset: 3px;
 }
 
-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-h1 { margin: 0; font-size: 1.35rem; line-height: 1.2; }
-.header-actions { display: flex; gap: 8px; }
-
-.icon-button {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--text);
-  background: var(--background);
-  color: var(--text);
-  cursor: pointer;
-}
-
-.icon-button:hover,
-.icon-button:active { background: var(--text); color: var(--background); }
-
-.icon-button svg,
 .download-button svg {
   width: 18px;
   fill: none;
@@ -101,12 +75,16 @@ h1 { margin: 0; font-size: 1.35rem; line-height: 1.2; }
 }
 
 .qr-version-label {
-  margin-top: 8px;
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  background: #fff;
   color: var(--muted);
   font-size: .72rem;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
-  text-align: center;
 }
 
 #qrPreview {
@@ -117,12 +95,14 @@ h1 { margin: 0; font-size: 1.35rem; line-height: 1.2; }
 }
 
 .controls { padding: 16px; border: 1px solid var(--border); }
+.appearance-controls { margin-top: 16px; }
 .field { display: block; }
 
 .field > span:first-child,
 .field > .field-label,
 .range-field > span,
-.color-field > label {
+.color-field > label,
+.logo-title {
   display: flex;
   justify-content: space-between;
   margin-bottom: 7px;
@@ -231,7 +211,10 @@ h1 { margin: 0; font-size: 1.35rem; line-height: 1.2; }
   background: var(--border);
 }
 
-.qr-version-info .version-arrow { font-weight: 700; }
+.qr-version-info .version-arrow {
+  margin: 0 8px;
+  font-weight: 700;
+}
 
 .field-help {
   margin: 7px 0 0;
@@ -243,17 +226,12 @@ h1 { margin: 0; font-size: 1.35rem; line-height: 1.2; }
 .select-field { margin-top: 16px; }
 .style-controls {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--soft-border);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
 }
 
-.style-controls .field > span { color: var(--muted); font-size: .75rem; font-weight: 500; }
 .module-size-field { margin-top: 16px; }
 .color-controls { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--soft-border); }
-.color-field > label { color: var(--muted); font-size: .75rem; font-weight: 500; }
 
 .color-input-wrap {
   height: 44px;
@@ -329,13 +307,6 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .logo-controls { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--soft-border); }
-
-.logo-title {
-  margin-bottom: 7px;
-  color: var(--muted);
-  font-size: .75rem;
-  font-weight: 500;
-}
 
 .logo-upload-row {
   display: grid;
