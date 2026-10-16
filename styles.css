@@ -55,6 +55,7 @@ select:focus-visible {
 }
 
 .preview-column { min-width: 0; }
+.controls-column { display: grid; gap: 16px; min-width: 0; }
 
 .canvas-area {
   position: relative;
@@ -100,7 +101,7 @@ select:focus-visible {
 
 .field > span:first-child,
 .field > .field-label,
-.range-field > span,
+.range-field > span:first-child,
 .color-field > label,
 .logo-title {
   display: flex;
@@ -230,7 +231,7 @@ select:focus-visible {
   gap: 16px;
 }
 
-.module-size-field { margin-top: 16px; }
+.module-size-field { margin-top: 16px; margin-inline-start: 16px; }
 .color-controls { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--soft-border); }
 
 .color-input-wrap {
@@ -275,6 +276,14 @@ input[type="color"]::-webkit-color-swatch { border: 1px solid var(--text); borde
 
 .range-field { display: block; }
 .range-field output { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.range-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: .82rem;
+}
+.range-control input { min-width: 0; flex: 1; }
+.range-control output { flex: 0 0 4ch; text-align: right; }
 
 input[type="range"] {
   width: 100%;
@@ -306,7 +315,15 @@ input[type="range"]::-moz-range-thumb {
   background: var(--background);
 }
 
-.logo-controls { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--soft-border); }
+.logo-area-controls { margin-top: 20px; }
+.logo-area-controls > .toggle-field,
+.logo-area-controls > .logo-size-field { margin-inline-start: 16px; }
+.logo-area-controls .toggle-field,
+.logo-size-field > span:first-child,
+.module-size-field > span:first-child {
+  color: var(--muted);
+  font-weight: 400;
+}
 
 .logo-upload-row {
   display: grid;
@@ -394,8 +411,9 @@ input[type="range"]::-moz-range-thumb {
 .toggle-switch input:focus-visible + .toggle-track { outline: 3px solid var(--focus); outline-offset: 3px; }
 
 .logo-area-guide {
-  fill: rgb(0 95 204 / 7%);
-  stroke: var(--focus);
+  fill: #D000A7;
+  fill-opacity: .15;
+  stroke: #D000A7;
   stroke-width: 1.5;
   stroke-dasharray: 5 4;
   vector-effect: non-scaling-stroke;
@@ -406,9 +424,6 @@ input[type="range"]::-moz-range-thumb {
   display: grid;
   grid-template-columns: minmax(0, .8fr) minmax(0, 1fr) 48px;
   gap: 8px;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--soft-border);
 }
 
 select, .download-button { min-height: 48px; border: 1px solid var(--text); }

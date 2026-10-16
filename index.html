@@ -7,7 +7,7 @@
     <meta name="description" content="QR code generator with SVG and PNG export.">
     <title>QR Generator</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=20261016-2">
+    <link rel="stylesheet" href="styles.css?v=20261016-6">
     <script src="vendor/qrcode.js" defer></script>
     <script src="script.js?v=20261016-2" defer></script>
   </head>
@@ -22,7 +22,7 @@
           <section class="controls appearance-controls" aria-label="QR appearance">
             <div class="style-controls">
               <label class="field" for="markerStyle">
-                <span>Marker style</span>
+                <span>Marker</span>
                 <select id="markerStyle">
                   <option value="square">Square</option>
                   <option value="rounded" selected>Rounded</option>
@@ -31,7 +31,7 @@
               </label>
 
               <label class="field" for="moduleStyle">
-                <span>Module style</span>
+                <span>Module</span>
                 <select id="moduleStyle">
                   <option value="square">Square</option>
                   <option value="soft">Soft</option>
@@ -44,8 +44,11 @@
             </div>
 
             <label class="range-field module-size-field" for="moduleScale" hidden>
-              <span>Module size <output id="moduleScaleValue">100%</output></span>
-              <input id="moduleScale" type="range" min="70" max="100" value="100" disabled>
+              <span>Size</span>
+              <span class="range-control">
+                <input id="moduleScale" type="range" min="70" max="100" value="100" disabled>
+                <output id="moduleScaleValue" for="moduleScale">100%</output>
+              </span>
             </label>
 
             <div class="color-controls">
@@ -60,52 +63,54 @@
           </section>
         </div>
 
-        <section class="controls" aria-label="Controls">
-          <label class="field prefix-field" for="prefixSelect">
-            <span>Type</span>
-            <select id="prefixSelect">
-              <option value="" data-placeholder="Text or address" data-inputmode="text" data-autocomplete="off" selected>Text</option>
-              <option value="https://" data-placeholder="example.com" data-inputmode="url" data-autocomplete="url">Web secure</option>
-              <option value="http://" data-placeholder="example.com" data-inputmode="url" data-autocomplete="url">Web</option>
-              <option value="mailto:" data-placeholder="name@example.com" data-inputmode="email" data-autocomplete="email">Email</option>
-              <option value="tel:" data-placeholder="+34 600 000 000" data-inputmode="tel" data-autocomplete="tel">Phone</option>
-              <option value="sms:" data-placeholder="+34 600 000 000" data-inputmode="tel" data-autocomplete="tel">SMS</option>
-            </select>
-          </label>
+        <div class="controls-column">
+          <section class="controls" aria-label="Controls">
+            <label class="field prefix-field" for="prefixSelect">
+              <span>Type</span>
+              <select id="prefixSelect">
+                <option value="" data-placeholder="Text or address" data-inputmode="text" data-autocomplete="off" selected>Text</option>
+                <option value="https://" data-placeholder="example.com" data-inputmode="url" data-autocomplete="url">Web secure</option>
+                <option value="http://" data-placeholder="example.com" data-inputmode="url" data-autocomplete="url">Web</option>
+                <option value="mailto:" data-placeholder="name@example.com" data-inputmode="email" data-autocomplete="email">Email</option>
+                <option value="tel:" data-placeholder="+34 600 000 000" data-inputmode="tel" data-autocomplete="tel">Phone</option>
+                <option value="sms:" data-placeholder="+34 600 000 000" data-inputmode="tel" data-autocomplete="tel">SMS</option>
+              </select>
+            </label>
 
-          <label class="field select-field" for="errorCorrection">
-            <span>Error correction</span>
-            <select id="errorCorrection">
-              <option value="L">Low · 7%</option>
-              <option value="M" selected>Medium · 15%</option>
-              <option value="Q">Quartile · 25%</option>
-              <option value="H">High · 30%</option>
-            </select>
-          </label>
+            <label class="field select-field" for="errorCorrection">
+              <span>Error Correction</span>
+              <select id="errorCorrection">
+                <option value="L">Low · 7%</option>
+                <option value="M" selected>Medium · 15%</option>
+                <option value="Q">Quartile · 25%</option>
+                <option value="H">High · 30%</option>
+              </select>
+            </label>
 
-          <div class="field url-field">
-            <label class="field-label" for="urlInput">Content</label>
-            <span id="urlInputWrap" class="url-input-wrap">
-              <span id="prefixGroup" class="url-prefix-group" hidden>
-                <span id="prefixText" class="url-prefix"></span>
-                <button id="removePrefix" class="remove-prefix" type="button" aria-label="Remove prefix" title="Remove prefix">&times;</button>
+            <div class="field url-field">
+              <label class="field-label" for="urlInput">Content</label>
+              <span id="urlInputWrap" class="url-input-wrap">
+                <span id="prefixGroup" class="url-prefix-group" hidden>
+                  <span id="prefixText" class="url-prefix"></span>
+                  <button id="removePrefix" class="remove-prefix" type="button" aria-label="Remove prefix" title="Remove prefix">&times;</button>
+                </span>
+                <input id="urlInput" type="text" value="example.com" placeholder="example.com" inputmode="url" autocomplete="url" spellcheck="false" aria-describedby="prefixText urlHelp">
               </span>
-              <input id="urlInput" type="text" value="example.com" placeholder="example.com" inputmode="url" autocomplete="url" spellcheck="false" aria-describedby="prefixText urlHelp">
-            </span>
-          </div>
-          <div id="encodingMode" class="encoding-mode" role="status" aria-live="polite" aria-label="Detected QR encoding: Byte">
-            <span data-mode="Byte" class="active">Byte</span>
-            <span data-mode="Alphanumeric">Alphanumeric</span>
-            <span data-mode="Numeric">Numeric</span>
-          </div>
-          <div id="qrVersionInfo" class="qr-version-info" role="status" aria-live="polite">
-            <span id="previousVersion">Minimum version</span>
-            <span class="version-separator" aria-hidden="true"></span>
-            <span id="nextVersion">+4 bytes → V2</span>
-          </div>
-          <p id="urlHelp" class="field-help" aria-live="polite" hidden></p>
+            </div>
+            <div id="encodingMode" class="encoding-mode" role="status" aria-live="polite" aria-label="Detected QR encoding: Byte">
+              <span data-mode="Byte" class="active">Byte</span>
+              <span data-mode="Alphanumeric">Alphanumeric</span>
+              <span data-mode="Numeric">Numeric</span>
+            </div>
+            <div id="qrVersionInfo" class="qr-version-info" role="status" aria-live="polite">
+              <span id="previousVersion">Minimum version</span>
+              <span class="version-separator" aria-hidden="true"></span>
+              <span id="nextVersion">+4 bytes → V2</span>
+            </div>
+            <p id="urlHelp" class="field-help" aria-live="polite" hidden></p>
+          </section>
 
-          <div class="logo-controls">
+          <section class="controls logo-controls" aria-label="Logo">
             <div class="logo-title">Logo</div>
             <div id="logoDropZone" class="logo-upload-row" role="button" tabindex="0" aria-label="Upload SVG logo" aria-describedby="logoError">
               <input id="logoInput" class="visually-hidden" type="file" accept=".svg,image/svg+xml">
@@ -114,49 +119,57 @@
             </div>
             <p id="logoError" class="field-help error" role="alert" hidden></p>
 
-            <label class="range-field logo-size-field" for="logoSize">
-              <span>Area size <output id="logoSizeValue">20%</output></span>
-              <input id="logoSize" type="range" min="10" max="30" value="20">
-            </label>
+            <div class="logo-area-controls" role="group" aria-labelledby="logoAreaTitle">
+              <div id="logoAreaTitle" class="logo-title">Logo Area</div>
+              <label class="toggle-field" for="showLogoArea">
+                <span>Show guide</span>
+                <span class="toggle-switch">
+                  <input id="showLogoArea" type="checkbox">
+                  <span class="toggle-track" aria-hidden="true"></span>
+                </span>
+              </label>
 
-            <label class="toggle-field" for="showLogoArea">
-              <span>Show area</span>
-              <span class="toggle-switch">
-                <input id="showLogoArea" type="checkbox">
-                <span class="toggle-track" aria-hidden="true"></span>
-              </span>
-            </label>
+              <label class="toggle-field" for="clearLogoArea">
+                <span>Clear</span>
+                <span class="toggle-switch">
+                  <input id="clearLogoArea" type="checkbox">
+                  <span class="toggle-track" aria-hidden="true"></span>
+                </span>
+              </label>
 
-            <label class="toggle-field" for="clearLogoArea">
-              <span>Clear area</span>
-              <span class="toggle-switch">
-                <input id="clearLogoArea" type="checkbox">
-                <span class="toggle-track" aria-hidden="true"></span>
-              </span>
-            </label>
-          </div>
+              <label class="range-field logo-size-field" for="logoSize">
+                <span>Size</span>
+                <span class="range-control">
+                  <input id="logoSize" type="range" min="10" max="30" value="20">
+                  <output id="logoSizeValue" for="logoSize">20%</output>
+                </span>
+              </label>
+            </div>
+          </section>
 
-          <div class="export-row">
-            <label class="visually-hidden" for="exportFormat">Format</label>
-            <select id="exportFormat">
-              <option value="png">PNG</option>
-              <option value="svg" selected>SVG</option>
-            </select>
-            <label class="visually-hidden" for="exportSize">Size</label>
-            <select id="exportSize">
-              <option value="32">32 px</option>
-              <option value="64">64 px</option>
-              <option value="128">128 px</option>
-              <option value="256" selected>256 px</option>
-              <option value="512">512 px</option>
-              <option value="1024">1024 px</option>
-              <option value="2048">2048 px</option>
-            </select>
-            <button id="downloadButton" class="download-button" type="button" aria-label="Download" title="Download">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></svg>
-            </button>
-          </div>
-        </section>
+          <section class="controls download-controls" aria-label="Download">
+            <div class="export-row">
+              <label class="visually-hidden" for="exportFormat">Format</label>
+              <select id="exportFormat">
+                <option value="png">PNG</option>
+                <option value="svg" selected>SVG</option>
+              </select>
+              <label class="visually-hidden" for="exportSize">Size</label>
+              <select id="exportSize">
+                <option value="32">32 px</option>
+                <option value="64">64 px</option>
+                <option value="128">128 px</option>
+                <option value="256" selected>256 px</option>
+                <option value="512">512 px</option>
+                <option value="1024">1024 px</option>
+                <option value="2048">2048 px</option>
+              </select>
+              <button id="downloadButton" class="download-button" type="button" aria-label="Download" title="Download">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></svg>
+              </button>
+            </div>
+          </section>
+        </div>
       </div>
     </main>
 
