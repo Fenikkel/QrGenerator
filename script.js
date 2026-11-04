@@ -470,7 +470,60 @@ function circuitDotPath(geometry) {
   return geometry.dots.map(({ x, y }) => circleCommand(x, y, geometry.width / 2)).join("");
 }
 
+function getSquareGroupGeometry(code, quietZone = QUIET_ZONE) {
+  const count = code.getModuleCount();
+  const scale = getModuleScale();
+  const inset = (1 - scale) / 2;
+  const radius = scale / 2;
+  const exclusionBox = state.clearLogoArea ? getLogoBox(code, quietZone) : null;
+  const squares = Array.from({ length: count + 1 }, () => new Uint16Array(count + 1));
+  // Largest square at each cell already contained in a previously drawn group.
+  const contained = new Uint16Array(count * count);
+  const groups = [];
+  let maximum = 0;
+
+  for (let row = count - 1; row >= 0; row -= 1) {
+    for (let column = count - 1; column >= 0; column -= 1) {
+      if (!shouldRenderModule(code, row, column, quietZone, exclusionBox, "square-groups")) continue;
+      const side = 1 + Math.min(squares[row + 1][column], squares[row][column + 1], squares[row + 1][column + 1]);
+      squares[row][column] = side;
+      maximum = Math.max(maximum, side);
+    }
+  }
+
+  for (let side = maximum; side >= 1; side -= 1) {
+    for (let row = 0; row <= count - side; row += 1) {
+      for (let column = 0; column <= count - side; column += 1) {
+        if (squares[row][column] < side || contained[row * count + column] >= side) continue;
+        const x = column + quietZone + inset;
+        const y = row + quietZone + inset;
+        const size = side - 1 + scale;
+        if (rectangleIntersectsBox(x, y, size, size, exclusionBox)) continue;
+
+        for (let dy = 0; dy < side; dy += 1) {
+          for (let dx = 0; dx < side; dx += 1) {
+            const index = (row + dy) * count + column + dx;
+            contained[index] = Math.max(contained[index], Math.min(side - dy, side - dx));
+          }
+        }
+        groups.push({ row, column, side, x, y, size, radius: Math.min(radius, size / 4) });
+      }
+    }
+  }
+
+  return groups;
+}
+
+function squareGroupsToPath(groups) {
+  return groups.map(({ x, y, size, radius }) => {
+    const r = formatNumber(radius, 4);
+    const span = formatNumber(size - 2 * radius, 4);
+    return `M${formatNumber(x + radius, 4)} ${formatNumber(y, 4)}h${span}a${r} ${r} 0 0 1 ${r} ${r}v${span}a${r} ${r} 0 0 1 -${r} ${r}h-${span}a${r} ${r} 0 0 1 -${r} -${r}v-${span}a${r} ${r} 0 0 1 ${r} -${r}Z`;
+  }).join("");
+}
+
 function modulesToPath(code, quietZone = QUIET_ZONE, style = state.moduleStyle) {
+  if (style === "square-groups") return squareGroupsToPath(getSquareGroupGeometry(code, quietZone));
   const count = code.getModuleCount();
   const commands = [];
   const exclusionBox = state.clearLogoArea ? getLogoBox(code, quietZone) : null;
@@ -1213,6 +1266,12 @@ function drawQrToCanvas(context, code, size) {
 
   if (isCircuitStyle()) {
     drawCanvasCircuit(context, getCircuitGeometry(code, quietZone), moduleSize, offset);
+  } else if (state.moduleStyle === "square-groups") {
+    context.save();
+    context.translate(offset, offset);
+    context.scale(moduleSize, moduleSize);
+    context.fill(new Path2D(squareGroupsToPath(getSquareGroupGeometry(code, quietZone))));
+    context.restore();
   } else {
     if (state.moduleStyle !== "square") context.beginPath();
 
