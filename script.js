@@ -1,11 +1,10 @@
 const defaults = {
-  prefix: "",
   url: "example.com",
   outerMarkerColor: "#202020",
   innerMarkerColor: "#202020",
   moduleColor: "#202020",
   errorCorrection: "M",
-  moduleStyle: "circuit",
+  moduleStyle: "regular-polygon",
   markersAsModules: false,
   showQrStructure: false,
   outerMarkerStyle: "rounded",
@@ -13,6 +12,9 @@ const defaults = {
   outerMarkerCornersOnly: false,
   innerMarkerStyle: "rounded",
   moduleScale: 100,
+  moduleSides: 4,
+  moduleCornerRadius: 0,
+  moduleRotation: 0,
   exportFormat: "svg",
   exportSize: "256",
   logoSize: 20,
@@ -33,10 +35,10 @@ const state = {
 const elements = {
   preview: document.querySelector("#qrPreview"),
   canvasArea: document.querySelector("#canvasArea"),
-  prefix: document.querySelector("#prefixSelect"),
-  prefixGroup: document.querySelector("#prefixGroup"),
-  prefixText: document.querySelector("#prefixText"),
-  removePrefix: document.querySelector("#removePrefix"),
+  previewColumn: document.querySelector(".preview-column"),
+  controlsColumn: document.querySelector(".controls-column"),
+  workspace: document.querySelector(".workspace"),
+  qrContent: document.querySelector(".qr-content"),
   urlInputWrap: document.querySelector("#urlInputWrap"),
   url: document.querySelector("#urlInput"),
   urlHelp: document.querySelector("#urlHelp"),
@@ -44,10 +46,19 @@ const elements = {
   encodingModes: document.querySelectorAll("#encodingMode [data-mode]"),
   qrVersionInfo: document.querySelector("#qrVersionInfo"),
   qrVersionLabel: document.querySelector("#qrVersionLabel"),
+  currentVersion: document.querySelector("#currentVersion"),
+  currentDimensions: document.querySelector("#currentDimensions"),
   previousVersion: document.querySelector("#previousVersion"),
   nextVersion: document.querySelector("#nextVersion"),
   errorCorrection: document.querySelector("#errorCorrection"),
   moduleStyle: document.querySelector("#moduleStyle"),
+  polygonProperties: document.querySelectorAll(".polygon-property"),
+  moduleSides: document.querySelector("#moduleSides"),
+  moduleSidesValue: document.querySelector("#moduleSidesValue"),
+  moduleCornerRadius: document.querySelector("#moduleCornerRadius"),
+  moduleCornerRadiusValue: document.querySelector("#moduleCornerRadiusValue"),
+  moduleRotation: document.querySelector("#moduleRotation"),
+  moduleRotationValue: document.querySelector("#moduleRotationValue"),
   markersAsModules: document.querySelector("#markersAsModules"),
   outerMarkerControls: document.querySelector("#outerMarkerControls"),
   innerMarkerControls: document.querySelector("#innerMarkerControls"),
@@ -81,6 +92,10 @@ const elements = {
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const QUIET_ZONE = 4;
+const MODULE_RANGE_PROPERTIES = [
+  ["moduleSides", ""], ["moduleScale", "%"],
+  ["moduleCornerRadius", "%"], ["moduleRotation", "°"],
+];
 const QR_STRUCTURE_REGIONS = [
   { id: "finder", label: "Finder patterns", color: "#EF4444" },
   { id: "separators", label: "Separators", color: "#10B981" },
@@ -91,10 +106,13 @@ const QR_STRUCTURE_REGIONS = [
   { id: "quiet", label: "Quiet zone", color: "#06B6D4" },
 ];
 const capacityCache = new Map();
+let regularPolygonCache;
 let toastTimer;
 let logoDragDepth = 0;
 let qrStructurePointerId = null;
+let previewTouch = null;
 const qrStructureKeys = new Set();
+const landscapeLayout = window.matchMedia("(aspect-ratio > 6/5)");
 
 qrcode.stringToBytes = qrcode.stringToBytesFuncs["UTF-8"];
 
@@ -102,11 +120,6 @@ function detectTextMode(value) {
   if (/^\d+$/.test(value)) return "Numeric";
   if (/^[0-9A-Z $%*+\-./:]+$/.test(value)) return "Alphanumeric";
   return "Byte";
-}
-
-function getQrMode(value, prefix) {
-  if (!value) return null;
-  return prefix ? "Byte" : detectTextMode(value);
 }
 
 function updateEncodingMode(mode) {
@@ -161,10 +174,48 @@ function formatUnits(amount, mode) {
   return `${amount} ${singular}${amount === 1 ? "" : "s"}`;
 }
 
+function updateVersionStep(element, version, amount, mode, previous) {
+  element.classList.toggle("is-unavailable", version === null);
+  element.replaceChildren();
+  element.removeAttribute("aria-label");
+  if (version === null) return;
+
+  const sign = previous ? "−" : "+";
+  const destination = document.createElement("span");
+  destination.className = "version-destination";
+  destination.textContent = `V${version}`;
+  const quantity = document.createElement("span");
+  quantity.className = "version-amount";
+  const number = document.createElement("span");
+  number.textContent = `${sign}${amount}`;
+  const unit = document.createElement("span");
+  unit.textContent = formatUnits(amount, mode).split(" ")[1];
+  quantity.append(number, unit);
+  const arrow = document.createElement("strong");
+  arrow.className = "version-arrow";
+  arrow.textContent = previous ? "←" : "→";
+  element.append(...(previous ? [destination, quantity, arrow] : [quantity, arrow, destination]));
+  element.setAttribute("aria-label", `${previous ? "Remove" : "Add"} ${formatUnits(amount, mode)} ${previous ? "to use" : "to reach"} V${version}`);
+}
+
+function syncVersionHintsVisibility() {
+  const editing = Boolean(state.qr && document.activeElement === elements.url && document.hasFocus() && !document.hidden);
+  elements.qrVersionInfo.classList.toggle("is-editing", editing);
+  elements.qrVersionInfo.setAttribute("aria-hidden", String(!editing));
+  const description = [elements.qrVersionInfo.dataset.description || "QR version"];
+  [elements.previousVersion, elements.nextVersion].forEach((step) => {
+    const visible = editing && !step.classList.contains("is-unavailable");
+    step.setAttribute("aria-hidden", String(!visible));
+    if (visible && step.hasAttribute("aria-label")) description.push(step.getAttribute("aria-label"));
+  });
+  elements.qrVersionInfo.setAttribute("aria-label", description.join(". "));
+}
+
 function updateVersionInfo(code, value, mode) {
   if (!code || !mode) {
     elements.qrVersionInfo.hidden = true;
     elements.qrVersionLabel.hidden = true;
+    syncVersionHintsVisibility();
     return;
   }
 
@@ -176,76 +227,14 @@ function updateVersionInfo(code, value, mode) {
 
   elements.qrVersionInfo.hidden = false;
   elements.qrVersionLabel.hidden = false;
-  elements.qrVersionLabel.textContent = `V${version} · ${moduleCount}×${moduleCount}`;
+  elements.currentVersion.textContent = `V${version}`;
+  elements.currentDimensions.textContent = `${moduleCount}×${moduleCount}`;
 
-  if (version === 1) {
-    elements.previousVersion.textContent = "Minimum version";
-  } else {
-    const previousCapacity = getQrCapacity(version - 1, mode, state.errorCorrection);
-    const previousArrow = document.createElement("strong");
-    previousArrow.className = "version-arrow";
-    previousArrow.textContent = "←";
-    elements.previousVersion.replaceChildren(
-      `V${version - 1} `,
-      previousArrow,
-      ` −${formatUnits(units - previousCapacity, mode)}`,
-    );
-  }
-
-  if (version === 40) {
-    elements.nextVersion.textContent = "Maximum version";
-  } else {
-    const nextArrow = document.createElement("strong");
-    nextArrow.className = "version-arrow";
-    nextArrow.textContent = "→";
-    elements.nextVersion.replaceChildren(
-      `+${formatUnits(nextAmount, mode)} `,
-      nextArrow,
-      ` V${version + 1}`,
-    );
-  }
-
-  elements.qrVersionInfo.setAttribute(
-    "aria-label",
-    `QR version ${version}, ${moduleCount} by ${moduleCount} modules. ${elements.previousVersion.textContent}. ${elements.nextVersion.textContent}.`,
-  );
-}
-
-function parseLink(value, prefix) {
-  const trimmed = value.trim();
-  if (!trimmed) return { empty: true };
-
-  const candidate = `${prefix}${trimmed}`;
-
-  if (!prefix) return { value: trimmed };
-
-  if (prefix === "mailto:") {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return { error: "Enter a valid email address." };
-    return { value: candidate };
-  }
-
-  if (prefix === "tel:" || prefix === "sms:") {
-    if (!/\d/.test(trimmed) || !/^\+?[\d\s().-]+$/.test(trimmed)) return { error: "Enter a valid phone number." };
-    return { value: candidate };
-  }
-
-  try {
-    const parsed = new URL(candidate);
-    if (`${parsed.protocol}//` !== prefix || !parsed.hostname) throw new Error("Invalid link");
-    return { value: parsed.href };
-  } catch {
-    return { error: "Enter a valid web address without the prefix." };
-  }
-}
-
-function updatePrefixField() {
-  const selected = elements.prefix.selectedOptions[0];
-  const prefix = elements.prefix.value;
-  elements.prefixText.textContent = prefix;
-  elements.prefixGroup.hidden = !prefix;
-  elements.url.placeholder = selected.dataset.placeholder;
-  elements.url.inputMode = selected.dataset.inputmode;
-  elements.url.autocomplete = selected.dataset.autocomplete;
+  const previousAmount = version > 1 ? units - getQrCapacity(version - 1, mode, state.errorCorrection) : 0;
+  updateVersionStep(elements.previousVersion, version > 1 ? version - 1 : null, previousAmount, mode, true);
+  updateVersionStep(elements.nextVersion, version < 40 ? version + 1 : null, nextAmount, mode, false);
+  elements.qrVersionInfo.dataset.description = `QR version ${version}, ${moduleCount} by ${moduleCount} modules`;
+  syncVersionHintsVisibility();
 }
 
 function createQr(value, mode) {
@@ -281,6 +270,105 @@ function circleCommand(centerX, centerY, radius) {
 
 function getModuleScale() {
   return state.moduleScale / 100;
+}
+
+function getRegularPolygonGeometry() {
+  const sides = state.moduleSides;
+  const rounding = state.moduleCornerRadius / 100;
+  const rotation = state.moduleRotation % 360;
+  const size = getModuleScale();
+  const key = `${rounding === 1 ? "circle" : `${sides}:${rounding}:${rotation}`}:${size}`;
+  if (regularPolygonCache?.key === key) return regularPolygonCache.geometry;
+
+  const turn = Math.PI * 2;
+  let start;
+  const segments = [];
+  if (rounding === 1) {
+    start = [1, 0];
+    for (let i = 0; i < 4; i += 1) {
+      const startAngle = i * Math.PI / 2;
+      const endAngle = startAngle + Math.PI / 2;
+      segments.push({ type: "arc", end: [Math.cos(endAngle), Math.sin(endAngle)], center: [0, 0], radius: 1, startAngle, endAngle });
+    }
+  } else {
+    const initialAngle = -Math.PI / 2 + (sides % 2 === 0 ? Math.PI / sides : 0) + rotation * Math.PI / 180;
+    const vertices = Array.from({ length: sides }, (_, i) => {
+      const angle = initialAngle + i * turn / sides;
+      return [Math.cos(angle), Math.sin(angle)];
+    });
+    if (rounding === 0) {
+      [start] = vertices;
+      vertices.slice(1).forEach((end) => segments.push({ type: "line", end }));
+    } else {
+      const radius = rounding * Math.cos(Math.PI / sides);
+      const corners = vertices.map(([x, y], i) => {
+        // Moving each fillet center inward by t gives tangencies at t * side / 2.
+        const center = [x * (1 - rounding), y * (1 - rounding)];
+        const angle = initialAngle + i * turn / sides;
+        const startAngle = angle - Math.PI / sides;
+        const endAngle = angle + Math.PI / sides;
+        return {
+          type: "arc", center, radius, startAngle, endAngle,
+          incoming: [center[0] + radius * Math.cos(startAngle), center[1] + radius * Math.sin(startAngle)],
+          end: [center[0] + radius * Math.cos(endAngle), center[1] + radius * Math.sin(endAngle)],
+        };
+      });
+      start = corners[0].incoming;
+      corners.forEach((corner, i) => {
+        if (i > 0) segments.push({ type: "line", end: corner.incoming });
+        segments.push(corner);
+      });
+    }
+  }
+
+  const points = [start, ...segments.map((segment) => segment.end)];
+  segments.forEach((segment) => {
+    if (segment.type !== "arc") return;
+    for (let i = 0; i < 4; i += 1) {
+      const angle = i * Math.PI / 2;
+      const distance = ((angle - segment.startAngle) % turn + turn) % turn;
+      if (distance <= segment.endAngle - segment.startAngle + 1e-10) {
+        points.push([segment.center[0] + segment.radius * Math.cos(angle), segment.center[1] + segment.radius * Math.sin(angle)]);
+      }
+    }
+  });
+  const xs = points.map(([x]) => x);
+  const ys = points.map(([, y]) => y);
+  const left = Math.min(...xs);
+  const right = Math.max(...xs);
+  const top = Math.min(...ys);
+  const bottom = Math.max(...ys);
+  const factor = size / Math.max(right - left, bottom - top);
+  const shiftX = .5 - (left + right) * factor / 2;
+  const shiftY = .5 - (top + bottom) * factor / 2;
+  const transform = ([x, y]) => [x * factor + shiftX, y * factor + shiftY];
+  const geometry = {
+    start: transform(start),
+    segments: segments.map((segment) => segment.type === "line"
+      ? { type: "line", end: transform(segment.end) }
+      : { ...segment, end: transform(segment.end), center: transform(segment.center), radius: segment.radius * factor }),
+    bounds: {
+      x: .5 - (right - left) * factor / 2,
+      y: .5 - (bottom - top) * factor / 2,
+      width: (right - left) * factor,
+      height: (bottom - top) * factor,
+    },
+  };
+  let previous = geometry.start;
+  geometry.pathTail = geometry.segments.map((segment) => {
+    const delta = `${formatNumber(segment.end[0] - previous[0], 6)} ${formatNumber(segment.end[1] - previous[1], 6)}`;
+    previous = segment.end;
+    if (segment.type === "line") return `l${delta}`;
+    const radius = formatNumber(segment.radius, 6);
+    return `a${radius} ${radius} 0 0 1 ${delta}`;
+  }).join("") + "Z";
+  regularPolygonCache = { key, geometry };
+  return geometry;
+}
+
+function regularPolygonCommand(x, y) {
+  const geometry = getRegularPolygonGeometry();
+  return `M${formatNumber(x + geometry.start[0], 6)} ${formatNumber(y + geometry.start[1], 6)}${geometry.pathTail}`;
 }
 
 function crossModulePoints(centerX, centerY, size, rotated) {
@@ -354,6 +442,7 @@ function roundedStarModuleGeometry(x, y, size) {
 }
 
 function moduleCommand(x, y, style) {
+  if (style === "regular-polygon") return regularPolygonCommand(x, y);
   const size = getModuleScale();
   const inset = (1 - size) / 2;
   const left = x + inset;
@@ -404,6 +493,10 @@ function getCircuitWidth() {
 
 function moduleIntersectsBox(row, column, quietZone, box, style = state.moduleStyle) {
   if (!box) return false;
+  if (style === "regular-polygon") {
+    const bounds = getRegularPolygonGeometry().bounds;
+    return rectangleIntersectsBox(column + quietZone + bounds.x, row + quietZone + bounds.y, bounds.width, bounds.height, box);
+  }
   const size = isCircuitStyle(style) ? getCircuitWidth() : getModuleScale();
   const inset = (1 - size) / 2;
   const left = column + quietZone + inset;
@@ -875,13 +968,53 @@ function updateQrStructureHold() {
 }
 
 function releaseQrStructureHold() {
-  const pointerId = qrStructurePointerId;
+  const pointerId = qrStructurePointerId ?? previewTouch?.pointerId;
   qrStructurePointerId = null;
+  previewTouch = null;
   qrStructureKeys.clear();
-  if (pointerId !== null && elements.canvasArea.hasPointerCapture(pointerId)) {
-    elements.canvasArea.releasePointerCapture(pointerId);
+  if (pointerId != null && elements.previewColumn.hasPointerCapture(pointerId)) {
+    elements.previewColumn.releasePointerCapture(pointerId);
   }
   updateQrStructureHold();
+}
+
+function resizeQrTextField() {
+  const textarea = elements.url;
+  const style = getComputedStyle(textarea);
+  const lineHeight = Number.parseFloat(style.lineHeight);
+  const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+  const border = Number.parseFloat(style.borderTopWidth) + Number.parseFloat(style.borderBottomWidth);
+  const scrollTop = textarea.scrollTop;
+  textarea.style.height = "auto";
+  textarea.style.overflowY = "hidden";
+  const contentHeight = textarea.scrollHeight;
+  const maxHeight = lineHeight * 3 + padding;
+  textarea.style.height = `${Math.min(maxHeight, Math.max(lineHeight + padding, contentHeight)) + border}px`;
+  textarea.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
+  textarea.classList.toggle("has-scroll", contentHeight > maxHeight);
+  textarea.scrollTop = scrollTop;
+}
+
+function updatePreviewDetailsHeight() {
+  const gap = Number.parseFloat(getComputedStyle(elements.previewColumn).rowGap) || 0;
+  const contentHeight = landscapeLayout.matches ? elements.qrContent.getBoundingClientRect().height + gap : 0;
+  elements.workspace.style.setProperty("--preview-details-height", `${Math.ceil(contentHeight)}px`);
+}
+
+function updateContentPlacement() {
+  const parent = landscapeLayout.matches ? elements.previewColumn : elements.controlsColumn;
+  if (elements.qrContent.parentNode !== parent) {
+    const focused = document.activeElement;
+    const restoreFocus = elements.qrContent.contains(focused);
+    const selection = focused === elements.url
+      ? [focused.selectionStart, focused.selectionEnd, focused.selectionDirection] : null;
+    parent.insertBefore(elements.qrContent, landscapeLayout.matches ? null : parent.firstChild);
+    if (restoreFocus) {
+      focused.focus({ preventScroll: true });
+      if (selection) focused.setSelectionRange(...selection);
+    }
+  }
+  updatePreviewDetailsHeight();
 }
 
 function clearPreview() {
@@ -902,9 +1035,9 @@ function setValidation(message = "") {
 }
 
 function render() {
+  resizeQrTextField();
   const trimmedValue = elements.url.value.trim();
-  const qrMode = getQrMode(trimmedValue, elements.prefix.value);
-  const result = parseLink(trimmedValue, elements.prefix.value);
+  const qrMode = trimmedValue ? detectTextMode(trimmedValue) : null;
   syncLogoGuideControl();
   elements.markersAsModules.checked = state.markersAsModules;
   elements.outerMarkerControls.hidden = state.markersAsModules;
@@ -915,11 +1048,15 @@ function render() {
   elements.outerMarkerCornersOnly.checked = state.outerMarkerCornersOnly;
   elements.innerMarkerColorValue.value = state.innerMarkerColor.toUpperCase();
   elements.moduleColorValue.value = state.moduleColor.toUpperCase();
-  elements.moduleScale.value = state.moduleScale;
-  elements.moduleScaleValue.textContent = `${state.moduleScale}%`;
+  elements.moduleStyle.value = state.moduleStyle;
+  elements.polygonProperties.forEach((field) => { field.hidden = state.moduleStyle !== "regular-polygon"; });
+  MODULE_RANGE_PROPERTIES.forEach(([key, suffix]) => {
+    elements[key].value = state[key];
+    elements[`${key}Value`].textContent = `${state[key]}${suffix}`;
+  });
   elements.logoSizeValue.textContent = `${state.logoSize}%`;
 
-  if (result.empty) {
+  if (!trimmedValue) {
     state.qr = null;
     state.encodedUrl = "";
     setValidation();
@@ -929,23 +1066,13 @@ function render() {
     return;
   }
 
-  if (result.error) {
-    state.qr = null;
-    state.encodedUrl = "";
-    setValidation(result.error);
-    updateVersionInfo(null);
-    clearPreview();
-    elements.download.disabled = true;
-    return;
-  }
-
   try {
-    state.qr = createQr(result.value, qrMode);
-    state.encodedUrl = result.value;
+    state.qr = createQr(trimmedValue, qrMode);
+    state.encodedUrl = trimmedValue;
   } catch {
     state.qr = null;
     state.encodedUrl = "";
-    setValidation("The link is too long to generate a QR code.");
+    setValidation("The content is too long to generate a QR code.");
     updateVersionInfo(null);
     clearPreview();
     elements.download.disabled = true;
@@ -953,7 +1080,7 @@ function render() {
   }
 
   setValidation();
-  updateVersionInfo(state.qr, result.value, qrMode);
+  updateVersionInfo(state.qr, trimmedValue, qrMode);
   const dimension = state.qr.getModuleCount() + QUIET_ZONE * 2;
   elements.canvasArea.style.setProperty("--checkerboard-size", `calc(200% / ${dimension})`);
   elements.preview.replaceChildren();
@@ -1106,16 +1233,11 @@ function clearLogo(renderAfter = true) {
 }
 
 elements.url.addEventListener("input", render);
-elements.prefix.addEventListener("change", () => {
-  updatePrefixField();
-  render();
-});
-elements.removePrefix.addEventListener("click", () => {
-  elements.prefix.value = "";
-  updatePrefixField();
-  render();
-  elements.url.focus();
-});
+elements.url.addEventListener("focus", syncVersionHintsVisibility);
+elements.url.addEventListener("blur", syncVersionHintsVisibility);
+window.addEventListener("focus", syncVersionHintsVisibility);
+window.addEventListener("blur", syncVersionHintsVisibility);
+document.addEventListener("visibilitychange", syncVersionHintsVisibility);
 elements.errorCorrection.addEventListener("change", () => {
   state.errorCorrection = elements.errorCorrection.value;
   render();
@@ -1128,23 +1250,60 @@ elements.errorCorrection.addEventListener("change", () => {
   });
 });
 
-elements.canvasArea.addEventListener("pointerdown", (event) => {
-  if (!state.qr || qrStructurePointerId !== null || !event.isPrimary || event.button !== 0) return;
+elements.previewColumn.addEventListener("wheel", (event) => {
+  if (event.ctrlKey || !event.deltaY) return;
+  if (event.target === elements.url && elements.url.scrollHeight > elements.url.clientHeight) return;
   event.preventDefault();
-  qrStructurePointerId = event.pointerId;
-  elements.canvasArea.setPointerCapture(event.pointerId);
+  const lineHeight = Number.parseFloat(getComputedStyle(elements.controlsColumn).lineHeight) || 24;
+  const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? lineHeight
+    : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? elements.controlsColumn.clientHeight : 1;
+  elements.controlsColumn.scrollTop += event.deltaY * unit;
+}, { passive: false });
+
+elements.previewColumn.addEventListener("touchmove", (event) => {
+  if (event.cancelable && event.touches.length === 1 && !elements.qrContent.contains(event.target)) event.preventDefault();
+}, { passive: false });
+
+elements.previewColumn.addEventListener("pointerdown", (event) => {
+  if (event.pointerType === "touch" && !event.isPrimary) {
+    releaseQrStructureHold();
+    return;
+  }
+  if (elements.qrContent.contains(event.target)) return;
+  if (!event.isPrimary || event.button !== 0 || qrStructurePointerId !== null || previewTouch) return;
+  const showStructure = state.qr && elements.canvasArea.contains(event.target);
+  if (!showStructure && event.pointerType !== "touch") return;
+  event.preventDefault();
+  if (event.pointerType === "touch") {
+    previewTouch = { pointerId: event.pointerId, startY: event.clientY, lastY: event.clientY, dragging: false };
+  }
+  if (showStructure) qrStructurePointerId = event.pointerId;
+  elements.previewColumn.setPointerCapture(event.pointerId);
   updateQrStructureHold();
 });
 
-function finishQrStructurePointer(event) {
-  if (event.pointerId !== qrStructurePointerId) return;
+elements.previewColumn.addEventListener("pointermove", (event) => {
+  if (event.pointerId !== previewTouch?.pointerId) return;
+  if (!previewTouch.dragging && Math.abs(event.clientY - previewTouch.startY) < 8) return;
+  event.preventDefault();
+  previewTouch.dragging = true;
   qrStructurePointerId = null;
+  updateQrStructureHold();
+  elements.controlsColumn.scrollTop += previewTouch.lastY - event.clientY;
+  previewTouch.lastY = event.clientY;
+});
+
+function finishQrStructurePointer(event) {
+  const matchesTouch = event.pointerId === previewTouch?.pointerId;
+  if (event.pointerId !== qrStructurePointerId && !matchesTouch) return;
+  if (matchesTouch) previewTouch = null;
+  if (event.pointerId === qrStructurePointerId) qrStructurePointerId = null;
   updateQrStructureHold();
 }
 
 window.addEventListener("pointerup", finishQrStructurePointer, true);
 window.addEventListener("pointercancel", finishQrStructurePointer, true);
-elements.canvasArea.addEventListener("lostpointercapture", finishQrStructurePointer);
+elements.previewColumn.addEventListener("lostpointercapture", finishQrStructurePointer);
 elements.canvasArea.addEventListener("contextmenu", (event) => {
   if (state.showQrStructure) event.preventDefault();
 });
@@ -1170,9 +1329,11 @@ elements.markersAsModules.addEventListener("change", () => {
   render();
 });
 
-elements.moduleScale.addEventListener("input", () => {
-  state.moduleScale = Number(elements.moduleScale.value);
-  render();
+MODULE_RANGE_PROPERTIES.forEach(([key]) => {
+  elements[key].addEventListener("input", () => {
+    state[key] = Number(elements[key].value);
+    render();
+  });
 });
 
 [
@@ -1464,11 +1625,11 @@ function drawQrToCanvas(context, code, size) {
 
   if (isCircuitStyle()) {
     drawCanvasCircuit(context, getCircuitGeometry(code, quietZone), moduleSize, offset);
-  } else if (state.moduleStyle === "square-groups") {
+  } else if (["square-groups", "regular-polygon"].includes(state.moduleStyle)) {
     context.save();
     context.translate(offset, offset);
     context.scale(moduleSize, moduleSize);
-    context.fill(new Path2D(squareGroupsToPath(getSquareGroupGeometry(code, quietZone))));
+    context.fill(new Path2D(modulesToPath(code, quietZone)));
     context.restore();
   } else {
     if (state.moduleStyle !== "square") context.beginPath();
@@ -1563,5 +1724,20 @@ elements.download.addEventListener("click", () => {
   }, "image/png");
 });
 
-updatePrefixField();
+landscapeLayout.addEventListener("change", () => {
+  releaseQrStructureHold();
+  updateContentPlacement();
+});
+let qrTextFieldWidth = 0;
+const previewDetailsObserver = new ResizeObserver(() => {
+  const width = elements.url.getBoundingClientRect().width;
+  if (width !== qrTextFieldWidth) {
+    qrTextFieldWidth = width;
+    resizeQrTextField();
+  }
+  updatePreviewDetailsHeight();
+});
+previewDetailsObserver.observe(elements.qrContent);
+
+updateContentPlacement();
 render();
