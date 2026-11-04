@@ -7,9 +7,9 @@
     <meta name="description" content="QR code generator with SVG and PNG export.">
     <title>QR Generator</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=20261104-23">
+    <link rel="stylesheet" href="styles.css?v=20261104-24">
     <script src="vendor/qrcode.js" defer></script>
-    <script src="script.js?v=20261104-39" defer></script>
+    <script src="script.js?v=20261104-40" defer></script>
   </head>
   <body>
     <main>
@@ -69,20 +69,8 @@
                 <span>Style</span>
                 <select id="moduleStyle" aria-label="Module style">
                   <option value="regular-polygon" selected>Regular polygon</option>
-                  <option value="square">Square</option>
-                  <option value="diamond">Diamond</option>
+                  <option value="figure">Figure</option>
                   <option value="square-groups">Square groups</option>
-                  <option value="hexagon">Hexagon</option>
-                  <option value="cross">Cross</option>
-                  <option value="cross-rotated">Cross (45°)</option>
-                  <option value="soft">Soft</option>
-                  <option value="rounded">Rounded</option>
-                  <option value="dots">Dots</option>
-                  <option value="hearts">Hearts</option>
-                  <option value="rounded-star">Rounded star</option>
-                  <option value="circuit">Circuit</option>
-                  <option value="circuit-horizontal">Circuit (horizontal)</option>
-                  <option value="circuit-vertical">Circuit (vertical)</option>
                 </select>
               </label>
               <div class="range-field polygon-property style-property">
@@ -97,15 +85,21 @@
                   <output id="moduleSidesValue" for="moduleSides">4</output>
                 </span>
                 <div id="moduleSidesRandomControl" class="random-range" data-module-random-range="moduleSides" role="group" aria-label="Random module sides range" hidden>
+                  <output data-bound-value="min" for="moduleSidesMin">3</output>
                   <div class="random-range-track">
                     <span class="random-range-rail" aria-hidden="true"></span>
                     <input id="moduleSidesMin" type="range" min="3" max="9" step="1" value="3" data-bound="min" aria-label="Minimum random module sides">
                     <input id="moduleSidesMax" type="range" min="3" max="9" step="1" value="9" data-bound="max" aria-label="Maximum random module sides">
                   </div>
-                  <div class="random-range-values">
-                    <span>Min <output data-bound-value="min" for="moduleSidesMin">3</output></span>
-                    <span>Max <output data-bound-value="max" for="moduleSidesMax">9</output></span>
-                  </div>
+                  <output data-bound-value="max" for="moduleSidesMax">9</output>
+                </div>
+              </div>
+              <div class="range-field figure-property style-property" role="group" aria-labelledby="moduleFormLabel" hidden>
+                <span id="moduleFormLabel">Form</span>
+                <div class="figure-control">
+                  <button type="button" data-module-figure="cross" aria-label="Cross" title="Cross" aria-pressed="true"><svg viewBox="0 0 1 1" aria-hidden="true"><path/></svg></button>
+                  <button type="button" data-module-figure="heart" aria-label="Heart" title="Heart" aria-pressed="false"><svg viewBox="0 0 1 1" aria-hidden="true"><path/></svg></button>
+                  <button type="button" data-module-figure="rounded-star" aria-label="Rounded star" title="Rounded star" aria-pressed="false"><svg viewBox="0 0 1 1" aria-hidden="true"><path/></svg></button>
                 </div>
               </div>
               <div class="range-field module-size-field style-property">
@@ -120,15 +114,13 @@
                   <output id="moduleScaleValue" for="moduleScale">100%</output>
                 </span>
                 <div id="moduleScaleRandomControl" class="random-range" data-module-random-range="moduleScale" role="group" aria-label="Random module size range" hidden>
+                  <output data-bound-value="min" for="moduleScaleMin">70%</output>
                   <div class="random-range-track">
                     <span class="random-range-rail" aria-hidden="true"></span>
                     <input id="moduleScaleMin" type="range" min="70" max="100" step="1" value="70" data-bound="min" aria-label="Minimum random module size">
                     <input id="moduleScaleMax" type="range" min="70" max="100" step="1" value="100" data-bound="max" aria-label="Maximum random module size">
                   </div>
-                  <div class="random-range-values">
-                    <span>Min <output data-bound-value="min" for="moduleScaleMin">70%</output></span>
-                    <span>Max <output data-bound-value="max" for="moduleScaleMax">100%</output></span>
-                  </div>
+                  <output data-bound-value="max" for="moduleScaleMax">100%</output>
                 </div>
               </div>
               <div class="range-field polygon-property style-property">
@@ -143,18 +135,16 @@
                   <output id="moduleCornerRadiusValue" for="moduleCornerRadius">0%</output>
                 </span>
                 <div id="moduleCornerRadiusRandomControl" class="random-range" data-module-random-range="moduleCornerRadius" role="group" aria-label="Random module corner radius range" hidden>
+                  <output data-bound-value="min" for="moduleCornerRadiusMin">0%</output>
                   <div class="random-range-track">
                     <span class="random-range-rail" aria-hidden="true"></span>
                     <input id="moduleCornerRadiusMin" type="range" min="0" max="100" step="1" value="0" data-bound="min" aria-label="Minimum random module corner radius">
                     <input id="moduleCornerRadiusMax" type="range" min="0" max="100" step="1" value="100" data-bound="max" aria-label="Maximum random module corner radius">
                   </div>
-                  <div class="random-range-values">
-                    <span>Min <output data-bound-value="min" for="moduleCornerRadiusMin">0%</output></span>
-                    <span>Max <output data-bound-value="max" for="moduleCornerRadiusMax">100%</output></span>
-                  </div>
+                  <output data-bound-value="max" for="moduleCornerRadiusMax">100%</output>
                 </div>
               </div>
-              <div class="range-field polygon-property style-property">
+              <div class="range-field shape-property style-property">
                 <div class="property-heading">
                   <label for="moduleRotation">Rotation</label>
                   <button type="button" class="shuffle-button" data-module-random="moduleRotation" aria-label="Randomize module rotation" aria-pressed="false" aria-controls="moduleRotationControl moduleRotationRandomControl" title="Randomize rotation">
@@ -166,15 +156,13 @@
                   <output id="moduleRotationValue" for="moduleRotation">0°</output>
                 </span>
                 <div id="moduleRotationRandomControl" class="random-range" data-module-random-range="moduleRotation" role="group" aria-label="Random module rotation range" hidden>
+                  <output data-bound-value="min" for="moduleRotationMin">0°</output>
                   <div class="random-range-track">
                     <span class="random-range-rail" aria-hidden="true"></span>
                     <input id="moduleRotationMin" type="range" min="0" max="360" step="1" value="0" data-bound="min" aria-label="Minimum random module rotation">
                     <input id="moduleRotationMax" type="range" min="0" max="360" step="1" value="360" data-bound="max" aria-label="Maximum random module rotation">
                   </div>
-                  <div class="random-range-values">
-                    <span>Min <output data-bound-value="min" for="moduleRotationMin">0°</output></span>
-                    <span>Max <output data-bound-value="max" for="moduleRotationMax">360°</output></span>
-                  </div>
+                  <output data-bound-value="max" for="moduleRotationMax">360°</output>
                 </div>
               </div>
               <div class="range-field polygon-property style-property" role="group" aria-labelledby="moduleMergeLabel">

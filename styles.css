@@ -378,6 +378,23 @@ select:focus-visible {
 .merge-control button:hover { background: #f5f5f5; }
 .merge-control button[aria-pressed="true"] { background: var(--text); color: var(--background); }
 
+.figure-control { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.figure-control button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 52px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--background);
+  cursor: pointer;
+}
+.figure-control button:hover { background: #f5f5f5; }
+.figure-control button[aria-pressed="true"] { color: var(--background); background: var(--text); }
+.figure-control svg { display: block; width: 30px; height: 30px; fill: currentColor; }
+
 .color-field {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -491,14 +508,16 @@ input[type="range"]::-moz-range-thumb {
 .random-range-track input::-moz-range-progress { background: transparent; }
 .random-range-track input::-webkit-slider-thumb { pointer-events: auto; }
 .random-range-track input::-moz-range-thumb { pointer-events: auto; }
-.random-range-values {
-  display: flex;
-  justify-content: space-between;
+.random-range {
+  display: grid;
+  grid-template-columns: 4ch minmax(0, 1fr) 4ch;
+  align-items: center;
   gap: 12px;
   color: var(--muted);
-  font-size: .72rem;
+  font-size: .82rem;
   font-variant-numeric: tabular-nums;
 }
+.random-range > output:last-child { text-align: right; }
 
 .logo-area-controls { margin-top: 20px; }
 .logo-area-controls > .toggle-field,

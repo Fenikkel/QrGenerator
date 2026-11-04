@@ -5,6 +5,7 @@ const defaults = {
   moduleColor: "#202020",
   errorCorrection: "M",
   moduleStyle: "regular-polygon",
+  moduleFigure: "cross",
   markersAsModules: false,
   showQrStructure: false,
   outerMarkerStyle: "rounded",
@@ -67,6 +68,9 @@ const elements = {
   moduleSeed: document.querySelector("#moduleSeed"),
   moduleSeedValue: document.querySelector("#moduleSeedValue"),
   polygonProperties: document.querySelectorAll(".polygon-property"),
+  shapeProperties: document.querySelectorAll(".shape-property"),
+  figureProperties: document.querySelectorAll(".figure-property"),
+  moduleFigureOptions: document.querySelectorAll("[data-module-figure]"),
   moduleSides: document.querySelector("#moduleSides"),
   moduleSidesValue: document.querySelector("#moduleSidesValue"),
   moduleCornerRadius: document.querySelector("#moduleCornerRadius"),
@@ -111,6 +115,7 @@ const MODULE_RANGE_PROPERTIES = [
   ["moduleSides", ""], ["moduleScale", "%"],
   ["moduleCornerRadius", "%"], ["moduleRotation", "°"],
 ];
+const FIGURE_RANGE_PROPERTIES = MODULE_RANGE_PROPERTIES.filter(([key]) => ["moduleScale", "moduleRotation"].includes(key));
 const MODULE_RANDOM_PROPERTIES = {
   moduleSides: { min: 3, max: 9, salt: 0x9e3779b9 },
   moduleScale: { min: 70, max: 100, salt: 0x243f6a88 },
@@ -139,7 +144,9 @@ const QR_STRUCTURE_REGIONS = [
 ];
 const capacityCache = new Map();
 let regularPolygonCache;
-let modulePolygonCache = { key: "", cells: new Map(), variants: new Map() };
+let figureGeometryCache;
+const figureTemplateCache = new Map();
+let moduleShapeCache = { key: "", cells: new Map(), variants: new Map() };
 let toastTimer;
 let logoDragDepth = 0;
 let qrStructurePointerId = null;
@@ -305,8 +312,14 @@ function getModuleScale() {
   return state.moduleScale / 100;
 }
 
-function hasRandomModuleProperties() {
-  return state.moduleStyle === "regular-polygon" && Object.values(state.moduleRandom).some(Boolean);
+function getRandomModuleProperties(style = state.moduleStyle) {
+  if (style === "regular-polygon") return MODULE_RANGE_PROPERTIES;
+  if (style === "figure") return FIGURE_RANGE_PROPERTIES;
+  return [];
+}
+
+function hasRandomModuleProperties(style = state.moduleStyle) {
+  return getRandomModuleProperties(style).some(([key]) => state.moduleRandom[key]);
 }
 
 function randomModuleValue(key, row, column) {
@@ -331,29 +344,31 @@ function setRandomModuleBound(key, bound, value) {
   render();
 }
 
-function getModulePolygonGeometry(row, column) {
-  if (!hasRandomModuleProperties()) return getRegularPolygonGeometry();
-  const key = `${state.moduleSeed}:` + MODULE_RANGE_PROPERTIES.map(([property]) => (
+function getModuleGeometry(row, column, style = state.moduleStyle) {
+  const buildGeometry = style === "figure" ? getFigureGeometry : getRegularPolygonGeometry;
+  if (!hasRandomModuleProperties(style)) return buildGeometry();
+  const rangeProperties = getRandomModuleProperties(style);
+  const key = `${style}:${style === "figure" ? state.moduleFigure : ""}:${state.moduleSeed}:` + rangeProperties.map(([property]) => (
     state.moduleRandom[property]
       ? `random:${state.moduleRandomRanges[property].min}-${state.moduleRandomRanges[property].max}`
       : state[property]
   )).join(":");
-  if (modulePolygonCache.key !== key) {
-    modulePolygonCache = { key, cells: new Map(), variants: new Map() };
+  if (moduleShapeCache.key !== key) {
+    moduleShapeCache = { key, cells: new Map(), variants: new Map() };
   }
   const cellKey = `${row}:${column}`;
-  if (modulePolygonCache.cells.has(cellKey)) return modulePolygonCache.cells.get(cellKey);
-  const properties = {};
-  MODULE_RANGE_PROPERTIES.forEach(([property]) => {
+  if (moduleShapeCache.cells.has(cellKey)) return moduleShapeCache.cells.get(cellKey);
+  const properties = { moduleFigure: state.moduleFigure };
+  rangeProperties.forEach(([property]) => {
     properties[property] = state.moduleRandom[property] ? randomModuleValue(property, row, column) : state[property];
   });
-  const variantKey = MODULE_RANGE_PROPERTIES.map(([property]) => properties[property]).join(":");
-  let geometry = modulePolygonCache.variants.get(variantKey);
+  const variantKey = rangeProperties.map(([property]) => properties[property]).join(":");
+  let geometry = moduleShapeCache.variants.get(variantKey);
   if (!geometry) {
-    geometry = getRegularPolygonGeometry(properties);
-    modulePolygonCache.variants.set(variantKey, geometry);
+    geometry = buildGeometry(properties);
+    moduleShapeCache.variants.set(variantKey, geometry);
   }
-  modulePolygonCache.cells.set(cellKey, geometry);
+  moduleShapeCache.cells.set(cellKey, geometry);
   return geometry;
 }
 
@@ -488,7 +503,7 @@ function regularPolygonMergedPath(code, quietZone) {
   for (let row = 0; row < count; row += 1) {
     for (let column = 0; column < count; column += 1) {
       if (!shouldRenderModule(code, row, column, quietZone, exclusionBox, "regular-polygon")) continue;
-      const geometry = getModulePolygonGeometry(row, column);
+      const geometry = getModuleGeometry(row, column, "regular-polygon");
       geometries[row * count + column] = geometry;
       commands.push(regularPolygonCommand(column + quietZone, row + quietZone, geometry));
     }
@@ -598,6 +613,104 @@ function roundedStarModuleGeometry(x, y, size) {
   };
 }
 
+function getFigureTemplate(figure, rotation) {
+  const key = `${figure}:${rotation}`;
+  if (figureTemplateCache.has(key)) return figureTemplateCache.get(key);
+  const angle = rotation * Math.PI / 180;
+  const cosine = Math.cos(angle);
+  const sine = Math.sin(angle);
+  const rotate = ([x, y]) => [(x - .5) * cosine - (y - .5) * sine, (x - .5) * sine + (y - .5) * cosine];
+  let start;
+  let segments;
+  if (figure === "cross") {
+    const points = crossModulePoints(.5, .5, 1, false).map(rotate);
+    [start] = points;
+    segments = points.slice(1).map((end) => ({ type: "line", end }));
+  } else {
+    const geometry = figure === "heart" ? heartModuleGeometry(0, 0, 1) : roundedStarModuleGeometry(0, 0, 1);
+    start = rotate(geometry.start);
+    segments = geometry.curves.map((curve) => ({
+      type: "cubic",
+      controls: [rotate(curve.slice(0, 2)), rotate(curve.slice(2, 4))],
+      end: rotate(curve.slice(4, 6)),
+    }));
+  }
+  const points = [start, ...segments.map((segment) => segment.end)];
+  let previous = start;
+  // Include the actual extrema of each rotated cubic, rather than its
+  // control box, so every figure stays centered and fits without distortion.
+  segments.forEach((segment) => {
+    if (segment.type === "cubic") {
+      const [p1, p2] = segment.controls;
+      const p0 = previous;
+      const p3 = segment.end;
+      for (let axis = 0; axis < 2; axis += 1) {
+        const a = -p0[axis] + 3 * p1[axis] - 3 * p2[axis] + p3[axis];
+        const b = 2 * (p0[axis] - 2 * p1[axis] + p2[axis]);
+        const c = p1[axis] - p0[axis];
+        const discriminant = b * b - 4 * a * c;
+        const roots = Math.abs(a) < 1e-12
+          ? (Math.abs(b) < 1e-12 ? [] : [-c / b])
+          : (discriminant < 0 ? [] : [(-b + Math.sqrt(discriminant)) / (2 * a), (-b - Math.sqrt(discriminant)) / (2 * a)]);
+        roots.forEach((t) => {
+          if (t <= 0 || t >= 1) return;
+          const u = 1 - t;
+          points.push([0, 1].map((i) => u ** 3 * p0[i] + 3 * u * u * t * p1[i] + 3 * u * t * t * p2[i] + t ** 3 * p3[i]));
+        });
+      }
+    }
+    previous = segment.end;
+  });
+  const xs = points.map(([x]) => x);
+  const ys = points.map(([, y]) => y);
+  const left = Math.min(...xs);
+  const right = Math.max(...xs);
+  const top = Math.min(...ys);
+  const bottom = Math.max(...ys);
+  const factor = 1 / Math.max(right - left, bottom - top);
+  const normalize = ([x, y]) => [.5 + (x - (left + right) / 2) * factor, .5 + (y - (top + bottom) / 2) * factor];
+  const template = {
+    start: normalize(start),
+    segments: segments.map((segment) => ({
+      ...segment, end: normalize(segment.end),
+      ...(segment.controls ? { controls: segment.controls.map(normalize) } : {}),
+    })),
+    bounds: { x: .5 - (right - left) * factor / 2, y: .5 - (bottom - top) * factor / 2, width: (right - left) * factor, height: (bottom - top) * factor },
+  };
+  figureTemplateCache.set(key, template);
+  return template;
+}
+
+function getFigureGeometry(properties = state) {
+  const rotation = properties.moduleRotation % 360;
+  const size = properties.moduleScale / 100;
+  const key = `${properties.moduleFigure}:${rotation}:${size}`;
+  if (figureGeometryCache?.key === key) return figureGeometryCache.geometry;
+  const template = getFigureTemplate(properties.moduleFigure, rotation);
+  const scale = ([x, y]) => [.5 + (x - .5) * size, .5 + (y - .5) * size];
+  const geometry = {
+    start: scale(template.start),
+    segments: template.segments.map((segment) => ({
+      ...segment, end: scale(segment.end),
+      ...(segment.controls ? { controls: segment.controls.map(scale) } : {}),
+    })),
+    bounds: {
+      x: .5 + (template.bounds.x - .5) * size, y: .5 + (template.bounds.y - .5) * size,
+      width: template.bounds.width * size, height: template.bounds.height * size,
+    },
+  };
+  let previous = geometry.start;
+  geometry.pathTail = geometry.segments.map((segment) => {
+    const coordinates = [...(segment.controls || []), segment.end].map(([x, y]) => (
+      `${formatNumber(x - previous[0], 6)} ${formatNumber(y - previous[1], 6)}`
+    )).join(" ");
+    previous = segment.end;
+    return `${segment.type === "cubic" ? "c" : "l"}${coordinates}`;
+  }).join("") + "Z";
+  figureGeometryCache = { key, geometry };
+  return geometry;
+}
+
 function moduleCommand(x, y, style) {
   if (style === "regular-polygon") return regularPolygonCommand(x, y);
   const size = getModuleScale();
@@ -650,8 +763,8 @@ function getCircuitWidth() {
 
 function moduleIntersectsBox(row, column, quietZone, box, style = state.moduleStyle) {
   if (!box) return false;
-  if (style === "regular-polygon") {
-    const bounds = getModulePolygonGeometry(row, column).bounds;
+  if (["regular-polygon", "figure"].includes(style)) {
+    const bounds = getModuleGeometry(row, column, style).bounds;
     return rectangleIntersectsBox(column + quietZone + bounds.x, row + quietZone + bounds.y, bounds.width, bounds.height, box);
   }
   const size = isCircuitStyle(style) ? getCircuitWidth() : getModuleScale();
@@ -801,7 +914,9 @@ function modulesToPath(code, quietZone = QUIET_ZONE, style = state.moduleStyle) 
       if (!shouldRenderModule(code, row, column, quietZone, exclusionBox, style)) continue;
       const x = column + quietZone;
       const y = row + quietZone;
-      commands.push(moduleCommand(x, y, style));
+      commands.push(style === "figure"
+        ? regularPolygonCommand(x, y, getModuleGeometry(row, column, style))
+        : moduleCommand(x, y, style));
     }
   }
 
@@ -1208,11 +1323,16 @@ function render() {
   elements.moduleColorValue.value = state.moduleColor.toUpperCase();
   elements.moduleStyle.value = state.moduleStyle;
   elements.polygonProperties.forEach((field) => { field.hidden = state.moduleStyle !== "regular-polygon"; });
+  elements.shapeProperties.forEach((field) => { field.hidden = !["regular-polygon", "figure"].includes(state.moduleStyle); });
+  elements.figureProperties.forEach((field) => { field.hidden = state.moduleStyle !== "figure"; });
+  elements.moduleFigureOptions.forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.moduleFigure === state.moduleFigure));
+  });
   elements.moduleRandomOptions.forEach((button) => {
     const key = button.dataset.moduleRandom;
-    const isPolygon = state.moduleStyle === "regular-polygon";
-    const isRandom = isPolygon && state.moduleRandom[key];
-    button.hidden = !isPolygon;
+    const supportsRandom = getRandomModuleProperties().some(([property]) => property === key);
+    const isRandom = supportsRandom && state.moduleRandom[key];
+    button.hidden = !supportsRandom;
     button.setAttribute("aria-pressed", String(state.moduleRandom[key]));
     elements[key].closest(".range-control").hidden = isRandom;
     elements[key].disabled = isRandom;
@@ -1530,6 +1650,17 @@ elements.moduleRandomOptions.forEach((button) => {
   button.addEventListener("click", () => {
     const key = button.dataset.moduleRandom;
     state.moduleRandom[key] = !state.moduleRandom[key];
+    render();
+  });
+});
+
+elements.moduleFigureOptions.forEach((button) => {
+  const figure = button.dataset.moduleFigure;
+  const geometry = getFigureGeometry({ moduleFigure: figure, moduleScale: 80, moduleRotation: 0 });
+  button.querySelector("path").setAttribute("d", regularPolygonCommand(0, 0, geometry));
+  button.addEventListener("click", () => {
+    if (state.moduleFigure === figure) return;
+    state.moduleFigure = figure;
     render();
   });
 });
@@ -1878,7 +2009,7 @@ function drawQrToCanvas(context, code, size) {
 
   if (isCircuitStyle()) {
     drawCanvasCircuit(context, getCircuitGeometry(code, quietZone), moduleSize, offset);
-  } else if (["square-groups", "regular-polygon"].includes(state.moduleStyle)) {
+  } else if (["square-groups", "regular-polygon", "figure"].includes(state.moduleStyle)) {
     context.save();
     context.translate(offset, offset);
     context.scale(moduleSize, moduleSize);
