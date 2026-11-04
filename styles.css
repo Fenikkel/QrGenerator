@@ -13,6 +13,8 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
+html, body { width: 100%; height: 100%; overflow: hidden; }
+
 body {
   margin: 0;
   background: var(--background);
@@ -23,9 +25,13 @@ body {
 
 main {
   width: 100%;
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 20px 16px 40px;
+  height: 100vh;
+  height: 100dvh;
+  padding:
+    max(16px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
 }
 
 button, input, select { font: inherit; }
@@ -49,17 +55,46 @@ select:focus-visible {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, .8fr);
-  align-items: start;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 45fr) minmax(0, 55fr);
   gap: 16px;
 }
 
-.preview-column { min-width: 0; }
-.controls-column { display: grid; gap: 16px; min-width: 0; }
+.preview-column {
+  min-width: 0;
+  min-height: 0;
+  container-type: size;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.controls-column {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  padding: 4px;
+  scroll-padding-block: 4px;
+}
+
+.controls-column:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
 
 .canvas-area {
   position: relative;
-  width: 100%;
+  width: max(0px, min(100cqw, calc(100cqh - 2.5rem)));
+  flex: 0 0 auto;
   aspect-ratio: 1;
   display: grid;
   place-items: center;
@@ -79,7 +114,7 @@ select:focus-visible {
 
 .qr-version-label {
   width: max-content;
-  margin-top: 8px;
+  margin: 0;
   padding: 5px 9px;
   border: 1px solid var(--border);
   background: #fff;
@@ -97,7 +132,6 @@ select:focus-visible {
 }
 
 .controls { padding: 16px; border: 1px solid var(--border); }
-.appearance-controls { margin-top: 16px; }
 .field { display: block; }
 
 .field > span:first-child,
@@ -494,13 +528,11 @@ select {
   border: 0;
 }
 
-@media (max-width: 760px) {
-  main { max-width: 520px; }
-  .workspace { grid-template-columns: 1fr; }
-}
-
-@media (min-width: 430px) {
-  main { padding-right: 24px; padding-left: 24px; }
+@media (aspect-ratio > 6/5) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr) min(44%, 420px);
+    grid-template-rows: minmax(0, 1fr);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

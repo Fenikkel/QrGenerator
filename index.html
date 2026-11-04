@@ -2,12 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
     <meta name="theme-color" content="#ffffff">
     <meta name="description" content="QR code generator with SVG and PNG export.">
     <title>QR Generator</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=20261104-7">
+    <link rel="stylesheet" href="styles.css?v=20261104-8">
     <script src="vendor/qrcode.js" defer></script>
     <script src="script.js?v=20261104-26" defer></script>
   </head>
@@ -19,6 +19,55 @@
             <svg id="qrPreview" role="img" aria-label="Generated QR code"></svg>
           </section>
           <div id="qrVersionLabel" class="qr-version-label" aria-live="polite">V1 · 21×21</div>
+        </div>
+
+        <div class="controls-column" role="region" aria-label="QR editor" tabindex="0">
+          <section class="controls" aria-label="Controls">
+            <label class="field prefix-field" for="prefixSelect">
+              <span>Type</span>
+              <select id="prefixSelect">
+                <option value="" data-placeholder="Text or address" data-inputmode="text" data-autocomplete="off" selected>Text</option>
+                <option value="https://" data-placeholder="example.com" data-inputmode="url" data-autocomplete="url">Web secure</option>
+                <option value="http://" data-placeholder="example.com" data-inputmode="url" data-autocomplete="url">Web</option>
+                <option value="mailto:" data-placeholder="name@example.com" data-inputmode="email" data-autocomplete="email">Email</option>
+                <option value="tel:" data-placeholder="+34 600 000 000" data-inputmode="tel" data-autocomplete="tel">Phone</option>
+                <option value="sms:" data-placeholder="+34 600 000 000" data-inputmode="tel" data-autocomplete="tel">SMS</option>
+              </select>
+            </label>
+
+            <label class="field select-field" for="errorCorrection">
+              <span>Error Correction</span>
+              <select id="errorCorrection">
+                <option value="L">Low · 7%</option>
+                <option value="M" selected>Medium · 15%</option>
+                <option value="Q">Quartile · 25%</option>
+                <option value="H">High · 30%</option>
+              </select>
+            </label>
+
+            <div class="field url-field">
+              <label class="field-label" for="urlInput">Content</label>
+              <span id="urlInputWrap" class="url-input-wrap">
+                <span id="prefixGroup" class="url-prefix-group" hidden>
+                  <span id="prefixText" class="url-prefix"></span>
+                  <button id="removePrefix" class="remove-prefix" type="button" aria-label="Remove prefix" title="Remove prefix">&times;</button>
+                </span>
+                <input id="urlInput" type="text" value="example.com" placeholder="example.com" inputmode="url" autocomplete="url" spellcheck="false" aria-describedby="prefixText urlHelp">
+              </span>
+            </div>
+            <div id="encodingMode" class="encoding-mode" role="status" aria-live="polite" aria-label="Detected QR encoding: Byte">
+              <span data-mode="Byte" class="active">Byte</span>
+              <span data-mode="Alphanumeric">Alphanumeric</span>
+              <span data-mode="Numeric">Numeric</span>
+            </div>
+            <div id="qrVersionInfo" class="qr-version-info" role="status" aria-live="polite">
+              <span id="previousVersion">Minimum version</span>
+              <span class="version-separator" aria-hidden="true"></span>
+              <span id="nextVersion">+4 bytes → V2</span>
+            </div>
+            <p id="urlHelp" class="field-help" aria-live="polite" hidden></p>
+          </section>
+
           <section class="controls appearance-controls" aria-label="QR appearance">
             <div class="style-controls">
               <label class="toggle-field marker-mode-toggle" for="markersAsModules">
@@ -122,54 +171,6 @@
                 </label>
               </div>
             </div>
-          </section>
-        </div>
-
-        <div class="controls-column">
-          <section class="controls" aria-label="Controls">
-            <label class="field prefix-field" for="prefixSelect">
-              <span>Type</span>
-              <select id="prefixSelect">
-                <option value="" data-placeholder="Text or address" data-inputmode="text" data-autocomplete="off" selected>Text</option>
-                <option value="https://" data-placeholder="example.com" data-inputmode="url" data-autocomplete="url">Web secure</option>
-                <option value="http://" data-placeholder="example.com" data-inputmode="url" data-autocomplete="url">Web</option>
-                <option value="mailto:" data-placeholder="name@example.com" data-inputmode="email" data-autocomplete="email">Email</option>
-                <option value="tel:" data-placeholder="+34 600 000 000" data-inputmode="tel" data-autocomplete="tel">Phone</option>
-                <option value="sms:" data-placeholder="+34 600 000 000" data-inputmode="tel" data-autocomplete="tel">SMS</option>
-              </select>
-            </label>
-
-            <label class="field select-field" for="errorCorrection">
-              <span>Error Correction</span>
-              <select id="errorCorrection">
-                <option value="L">Low · 7%</option>
-                <option value="M" selected>Medium · 15%</option>
-                <option value="Q">Quartile · 25%</option>
-                <option value="H">High · 30%</option>
-              </select>
-            </label>
-
-            <div class="field url-field">
-              <label class="field-label" for="urlInput">Content</label>
-              <span id="urlInputWrap" class="url-input-wrap">
-                <span id="prefixGroup" class="url-prefix-group" hidden>
-                  <span id="prefixText" class="url-prefix"></span>
-                  <button id="removePrefix" class="remove-prefix" type="button" aria-label="Remove prefix" title="Remove prefix">&times;</button>
-                </span>
-                <input id="urlInput" type="text" value="example.com" placeholder="example.com" inputmode="url" autocomplete="url" spellcheck="false" aria-describedby="prefixText urlHelp">
-              </span>
-            </div>
-            <div id="encodingMode" class="encoding-mode" role="status" aria-live="polite" aria-label="Detected QR encoding: Byte">
-              <span data-mode="Byte" class="active">Byte</span>
-              <span data-mode="Alphanumeric">Alphanumeric</span>
-              <span data-mode="Numeric">Numeric</span>
-            </div>
-            <div id="qrVersionInfo" class="qr-version-info" role="status" aria-live="polite">
-              <span id="previousVersion">Minimum version</span>
-              <span class="version-separator" aria-hidden="true"></span>
-              <span id="nextVersion">+4 bytes → V2</span>
-            </div>
-            <p id="urlHelp" class="field-help" aria-live="polite" hidden></p>
           </section>
 
           <section class="controls logo-controls" aria-label="Logo">
