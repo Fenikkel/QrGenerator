@@ -353,7 +353,7 @@ function isCircuitStyle(style = state.moduleStyle) {
 }
 
 function getCircuitWidth() {
-  return 1;
+  return getModuleScale();
 }
 
 function moduleIntersectsBox(row, column, quietZone, box, style = state.moduleStyle) {
@@ -669,15 +669,12 @@ function render() {
   const trimmedValue = elements.url.value.trim();
   const qrMode = getQrMode(trimmedValue, elements.prefix.value);
   const result = parseLink(trimmedValue, elements.prefix.value);
-  const circuitSelected = isCircuitStyle();
   updateEncodingMode(qrMode);
   elements.outerMarkerColorValue.value = state.outerMarkerColor.toUpperCase();
   elements.cutOuterMarkerCorners.checked = state.cutOuterMarkerCorners;
   elements.outerMarkerCornersOnly.checked = state.outerMarkerCornersOnly;
   elements.innerMarkerColorValue.value = state.innerMarkerColor.toUpperCase();
   elements.moduleColorValue.value = state.moduleColor.toUpperCase();
-  elements.moduleScaleField.hidden = circuitSelected;
-  elements.moduleScale.disabled = circuitSelected;
   elements.moduleScale.value = state.moduleScale;
   elements.moduleScaleValue.textContent = `${state.moduleScale}%`;
   elements.logoSizeValue.textContent = `${state.logoSize}%`;
