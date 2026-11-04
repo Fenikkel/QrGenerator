@@ -27,6 +27,14 @@ const state = {
   ...defaults,
   encodedUrl: defaults.url,
   qr: null,
+  moduleSeed: crypto.getRandomValues(new Uint32Array(1))[0],
+  moduleRandom: { moduleSides: false, moduleScale: false, moduleCornerRadius: false, moduleRotation: false },
+  moduleRandomRanges: {
+    moduleSides: { min: 3, max: 9 },
+    moduleScale: { min: 70, max: 100 },
+    moduleCornerRadius: { min: 0, max: 100 },
+    moduleRotation: { min: 0, max: 360 },
+  },
   logoDataUrl: "",
   logoAspectRatio: 1,
   logoImage: null,
@@ -53,6 +61,11 @@ const elements = {
   nextVersion: document.querySelector("#nextVersion"),
   errorCorrection: document.querySelector("#errorCorrection"),
   moduleStyle: document.querySelector("#moduleStyle"),
+  moduleRandomOptions: document.querySelectorAll("[data-module-random]"),
+  moduleRandomRanges: document.querySelectorAll("[data-module-random-range]"),
+  moduleSeedField: document.querySelector("#moduleSeedField"),
+  moduleSeed: document.querySelector("#moduleSeed"),
+  moduleSeedValue: document.querySelector("#moduleSeedValue"),
   polygonProperties: document.querySelectorAll(".polygon-property"),
   moduleSides: document.querySelector("#moduleSides"),
   moduleSidesValue: document.querySelector("#moduleSidesValue"),
@@ -98,6 +111,23 @@ const MODULE_RANGE_PROPERTIES = [
   ["moduleSides", ""], ["moduleScale", "%"],
   ["moduleCornerRadius", "%"], ["moduleRotation", "°"],
 ];
+const MODULE_RANDOM_PROPERTIES = {
+  moduleSides: { min: 3, max: 9, salt: 0x9e3779b9 },
+  moduleScale: { min: 70, max: 100, salt: 0x243f6a88 },
+  moduleCornerRadius: { min: 0, max: 100, salt: 0xb7e15162 },
+  moduleRotation: { min: 0, max: 360, salt: 0xdeadbeef },
+};
+const moduleRandomControls = new Map(Array.from(elements.moduleRandomRanges, (group) => [
+  group.dataset.moduleRandomRange,
+  {
+    group,
+    track: group.querySelector(".random-range-track"),
+    min: group.querySelector('[data-bound="min"]'),
+    max: group.querySelector('[data-bound="max"]'),
+    minValue: group.querySelector('[data-bound-value="min"]'),
+    maxValue: group.querySelector('[data-bound-value="max"]'),
+  },
+]));
 const QR_STRUCTURE_REGIONS = [
   { id: "finder", label: "Finder patterns", color: "#EF4444" },
   { id: "separators", label: "Separators", color: "#10B981" },
@@ -109,6 +139,7 @@ const QR_STRUCTURE_REGIONS = [
 ];
 const capacityCache = new Map();
 let regularPolygonCache;
+let modulePolygonCache = { key: "", cells: new Map(), variants: new Map() };
 let toastTimer;
 let logoDragDepth = 0;
 let qrStructurePointerId = null;
@@ -274,11 +305,77 @@ function getModuleScale() {
   return state.moduleScale / 100;
 }
 
-function getRegularPolygonGeometry() {
-  const sides = state.moduleSides;
-  const rounding = state.moduleCornerRadius / 100;
-  const rotation = state.moduleRotation % 360;
-  const size = getModuleScale();
+function hasRandomModuleProperties() {
+  return state.moduleStyle === "regular-polygon" && Object.values(state.moduleRandom).some(Boolean);
+}
+
+function randomModuleValue(key, row, column) {
+  const { salt } = MODULE_RANDOM_PROPERTIES[key];
+  const { min, max } = state.moduleRandomRanges[key];
+  let hash = state.moduleSeed ^ salt ^ Math.imul(row + 1, 0x85ebca6b) ^ Math.imul(column + 1, 0xc2b2ae35);
+  hash = Math.imul(hash ^ (hash >>> 16), 0x7feb352d);
+  hash = Math.imul(hash ^ (hash >>> 15), 0x846ca68b);
+  hash = (hash ^ (hash >>> 16)) >>> 0;
+  return min + Math.floor(hash / 0x100000000 * (max - min + 1));
+}
+
+function setRandomModuleBound(key, bound, value) {
+  const limits = MODULE_RANDOM_PROPERTIES[key];
+  const range = state.moduleRandomRanges[key];
+  const minimum = bound === "min" ? limits.min : range.min;
+  const maximum = bound === "max" ? limits.max : range.max;
+  const next = Math.max(minimum, Math.min(maximum, Math.round(value)));
+  moduleRandomControls.get(key)[bound].value = next;
+  if (range[bound] === next) return;
+  range[bound] = next;
+  render();
+}
+
+function getModulePolygonGeometry(row, column) {
+  if (!hasRandomModuleProperties()) return getRegularPolygonGeometry();
+  const key = `${state.moduleSeed}:` + MODULE_RANGE_PROPERTIES.map(([property]) => (
+    state.moduleRandom[property]
+      ? `random:${state.moduleRandomRanges[property].min}-${state.moduleRandomRanges[property].max}`
+      : state[property]
+  )).join(":");
+  if (modulePolygonCache.key !== key) {
+    modulePolygonCache = { key, cells: new Map(), variants: new Map() };
+  }
+  const cellKey = `${row}:${column}`;
+  if (modulePolygonCache.cells.has(cellKey)) return modulePolygonCache.cells.get(cellKey);
+  const properties = {};
+  MODULE_RANGE_PROPERTIES.forEach(([property]) => {
+    properties[property] = state.moduleRandom[property] ? randomModuleValue(property, row, column) : state[property];
+  });
+  const variantKey = MODULE_RANGE_PROPERTIES.map(([property]) => properties[property]).join(":");
+  let geometry = modulePolygonCache.variants.get(variantKey);
+  if (!geometry) {
+    geometry = getRegularPolygonGeometry(properties);
+    modulePolygonCache.variants.set(variantKey, geometry);
+  }
+  modulePolygonCache.cells.set(cellKey, geometry);
+  return geometry;
+}
+
+function polygonBridgeGeometry(vertices) {
+  const xs = vertices.map(([x]) => x);
+  const ys = vertices.map(([, y]) => y);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return {
+    start: vertices[0], vertices,
+    bounds: { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y },
+    pathTail: vertices.slice(1).map(([x, y], i) => (
+      `l${formatNumber(x - vertices[i][0], 6)} ${formatNumber(y - vertices[i][1], 6)}`
+    )).join("") + "Z",
+  };
+}
+
+function getRegularPolygonGeometry(properties = state) {
+  const sides = properties.moduleSides;
+  const rounding = properties.moduleCornerRadius / 100;
+  const rotation = properties.moduleRotation % 360;
+  const size = properties.moduleScale / 100;
   const key = `${rounding === 1 ? "circle" : `${sides}:${rounding}:${rotation}`}:${size}`;
   if (regularPolygonCache?.key === key) return regularPolygonCache.geometry;
 
@@ -365,24 +462,6 @@ function getRegularPolygonGeometry() {
       left: supportPoint(0, left), right: supportPoint(0, right),
     },
   };
-  const bridgeGeometry = (vertices) => {
-    const xs = vertices.map(([x]) => x);
-    const ys = vertices.map(([, y]) => y);
-    const x = Math.min(...xs);
-    const y = Math.min(...ys);
-    return {
-      start: vertices[0], vertices,
-      bounds: { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y },
-      pathTail: vertices.slice(1).map(([x, y], i) => (
-        `l${formatNumber(x - vertices[i][0], 6)} ${formatNumber(y - vertices[i][1], 6)}`
-      )).join("") + "Z",
-    };
-  };
-  const support = geometry.supportPoints;
-  geometry.bridges = {
-    horizontal: bridgeGeometry([support.top, [support.top[0] + 1, support.top[1]], [support.bottom[0] + 1, support.bottom[1]], support.bottom]),
-    vertical: bridgeGeometry([support.left, support.right, [support.right[0], support.right[1] + 1], [support.left[0], support.left[1] + 1]]),
-  };
   let previous = geometry.start;
   geometry.pathTail = geometry.segments.map((segment) => {
     const delta = `${formatNumber(segment.end[0] - previous[0], 6)} ${formatNumber(segment.end[1] - previous[1], 6)}`;
@@ -395,26 +474,26 @@ function getRegularPolygonGeometry() {
   return geometry;
 }
 
-function regularPolygonCommand(x, y) {
-  const geometry = getRegularPolygonGeometry();
+function regularPolygonCommand(x, y, geometry = getRegularPolygonGeometry()) {
   return `M${formatNumber(x + geometry.start[0], 6)} ${formatNumber(y + geometry.start[1], 6)}${geometry.pathTail}`;
 }
 
 function regularPolygonMergedPath(code, quietZone) {
   const count = code.getModuleCount();
-  const eligible = new Uint8Array(count * count);
+  const geometries = new Array(count * count);
   const commands = [];
   const exclusionBox = state.clearLogoArea ? getLogoBox(code, quietZone) : null;
-  const { bridges } = getRegularPolygonGeometry();
   const horizontal = state.moduleMerge === "all" || state.moduleMerge === "horizontal";
   const vertical = state.moduleMerge === "all" || state.moduleMerge === "vertical";
   for (let row = 0; row < count; row += 1) {
     for (let column = 0; column < count; column += 1) {
       if (!shouldRenderModule(code, row, column, quietZone, exclusionBox, "regular-polygon")) continue;
-      eligible[row * count + column] = 1;
-      commands.push(regularPolygonCommand(column + quietZone, row + quietZone));
+      const geometry = getModulePolygonGeometry(row, column);
+      geometries[row * count + column] = geometry;
+      commands.push(regularPolygonCommand(column + quietZone, row + quietZone, geometry));
     }
   }
+  if (!horizontal && !vertical) return commands.join("");
   const appendBridge = (row, column, bridge) => {
     const x = column + quietZone;
     const y = row + quietZone;
@@ -422,14 +501,27 @@ function regularPolygonMergedPath(code, quietZone) {
     if (rectangleIntersectsBox(x + bounds.x, y + bounds.y, bounds.width, bounds.height, exclusionBox)) return;
     commands.push(`M${formatNumber(x + bridge.start[0], 6)} ${formatNumber(y + bridge.start[1], 6)}${bridge.pathTail}`);
   };
+  const bridgeFor = (first, second, direction) => {
+    if (first === second && first.bridges?.[direction]) return first.bridges[direction];
+    const a = first.supportPoints;
+    const b = second.supportPoints;
+    const bridge = polygonBridgeGeometry(direction === "horizontal"
+      ? [a.top, [b.top[0] + 1, b.top[1]], [b.bottom[0] + 1, b.bottom[1]], a.bottom]
+      : [a.left, a.right, [b.right[0], b.right[1] + 1], [b.left[0], b.left[1] + 1]]);
+    if (first === second) (first.bridges ??= {})[direction] = bridge;
+    return bridge;
+  };
   for (let row = 0; row < count; row += 1) {
     for (let column = 0; column < count; column += 1) {
-      if (!eligible[row * count + column]) continue;
-      if (horizontal && column + 1 < count && eligible[row * count + column + 1]) {
-        appendBridge(row, column, bridges.horizontal);
+      const geometry = geometries[row * count + column];
+      if (!geometry) continue;
+      const right = geometries[row * count + column + 1];
+      const down = geometries[(row + 1) * count + column];
+      if (horizontal && column + 1 < count && right) {
+        appendBridge(row, column, bridgeFor(geometry, right, "horizontal"));
       }
-      if (vertical && row + 1 < count && eligible[(row + 1) * count + column]) {
-        appendBridge(row, column, bridges.vertical);
+      if (vertical && row + 1 < count && down) {
+        appendBridge(row, column, bridgeFor(geometry, down, "vertical"));
       }
     }
   }
@@ -559,7 +651,7 @@ function getCircuitWidth() {
 function moduleIntersectsBox(row, column, quietZone, box, style = state.moduleStyle) {
   if (!box) return false;
   if (style === "regular-polygon") {
-    const bounds = getRegularPolygonGeometry().bounds;
+    const bounds = getModulePolygonGeometry(row, column).bounds;
     return rectangleIntersectsBox(column + quietZone + bounds.x, row + quietZone + bounds.y, bounds.width, bounds.height, box);
   }
   const size = isCircuitStyle(style) ? getCircuitWidth() : getModuleScale();
@@ -699,7 +791,7 @@ function squareGroupsToPath(groups) {
 
 function modulesToPath(code, quietZone = QUIET_ZONE, style = state.moduleStyle) {
   if (style === "square-groups") return squareGroupsToPath(getSquareGroupGeometry(code, quietZone));
-  if (style === "regular-polygon" && state.moduleMerge !== "none") return regularPolygonMergedPath(code, quietZone);
+  if (style === "regular-polygon") return regularPolygonMergedPath(code, quietZone);
   const count = code.getModuleCount();
   const commands = [];
   const exclusionBox = state.clearLogoArea ? getLogoBox(code, quietZone) : null;
@@ -1116,12 +1208,41 @@ function render() {
   elements.moduleColorValue.value = state.moduleColor.toUpperCase();
   elements.moduleStyle.value = state.moduleStyle;
   elements.polygonProperties.forEach((field) => { field.hidden = state.moduleStyle !== "regular-polygon"; });
+  elements.moduleRandomOptions.forEach((button) => {
+    const key = button.dataset.moduleRandom;
+    const isPolygon = state.moduleStyle === "regular-polygon";
+    const isRandom = isPolygon && state.moduleRandom[key];
+    button.hidden = !isPolygon;
+    button.setAttribute("aria-pressed", String(state.moduleRandom[key]));
+    elements[key].closest(".range-control").hidden = isRandom;
+    elements[key].disabled = isRandom;
+    const controls = moduleRandomControls.get(key);
+    controls.group.hidden = !isRandom;
+    controls.min.disabled = !isRandom;
+    controls.max.disabled = !isRandom;
+    button.previousElementSibling.htmlFor = isRandom ? controls.min.id : key;
+  });
+  elements.moduleSeedField.hidden = !hasRandomModuleProperties();
+  elements.moduleSeed.value = state.moduleSeed;
+  elements.moduleSeedValue.textContent = String(state.moduleSeed);
   elements.moduleMergeOptions.forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.moduleMerge === state.moduleMerge));
   });
   MODULE_RANGE_PROPERTIES.forEach(([key, suffix]) => {
     elements[key].value = state[key];
     elements[`${key}Value`].textContent = `${state[key]}${suffix}`;
+    const controls = moduleRandomControls.get(key);
+    const range = state.moduleRandomRanges[key];
+    const limits = MODULE_RANDOM_PROPERTIES[key];
+    for (const bound of ["min", "max"]) {
+      controls[bound].value = range[bound];
+      controls[`${bound}Value`].textContent = `${range[bound]}${suffix}`;
+      controls[bound].setAttribute("aria-valuetext", `${range[bound]}${suffix}`);
+      const position = (range[bound] - limits.min) / (limits.max - limits.min) * 100;
+      controls.group.style.setProperty(`--range-${bound}`, `${position}%`);
+    }
+    controls.min.setAttribute("aria-valuemax", range.max);
+    controls.max.setAttribute("aria-valuemin", range.min);
   });
   elements.logoSizeValue.textContent = `${state.logoSize}%`;
 
@@ -1403,6 +1524,60 @@ MODULE_RANGE_PROPERTIES.forEach(([key]) => {
     state[key] = Number(elements[key].value);
     render();
   });
+});
+
+elements.moduleRandomOptions.forEach((button) => {
+  button.addEventListener("click", () => {
+    const key = button.dataset.moduleRandom;
+    state.moduleRandom[key] = !state.moduleRandom[key];
+    render();
+  });
+});
+
+moduleRandomControls.forEach((controls, key) => {
+  for (const bound of ["min", "max"]) {
+    controls[bound].addEventListener("input", () => {
+      setRandomModuleBound(key, bound, Number(controls[bound].value));
+    });
+  }
+
+  // Native thumbs handle their own dragging. Tapping the shared rail moves
+  // the nearer thumb, including when both thumbs start at the same value.
+  let railPointer = null;
+  const valueAtPointer = (event) => {
+    const rect = controls.track.getBoundingClientRect();
+    const position = Math.max(0, Math.min(1, (event.clientX - rect.left - 8) / Math.max(1, rect.width - 16)));
+    const limits = MODULE_RANDOM_PROPERTIES[key];
+    return Math.round(limits.min + position * (limits.max - limits.min));
+  };
+  controls.track.addEventListener("pointerdown", (event) => {
+    if (!event.isPrimary || event.button !== 0 || event.target.matches("input")) return;
+    const value = valueAtPointer(event);
+    const range = state.moduleRandomRanges[key];
+    const bound = value < (range.min + range.max) / 2 ? "min" : "max";
+    event.preventDefault();
+    railPointer = { id: event.pointerId, bound };
+    controls[bound].focus({ preventScroll: true });
+    controls.track.setPointerCapture(event.pointerId);
+    setRandomModuleBound(key, bound, value);
+  });
+  controls.track.addEventListener("pointermove", (event) => {
+    if (railPointer?.id !== event.pointerId) return;
+    setRandomModuleBound(key, railPointer.bound, valueAtPointer(event));
+  });
+  const endRailPointer = (event) => {
+    if (railPointer?.id !== event.pointerId) return;
+    railPointer = null;
+    if (controls.track.hasPointerCapture(event.pointerId)) controls.track.releasePointerCapture(event.pointerId);
+  };
+  controls.track.addEventListener("pointerup", endRailPointer);
+  controls.track.addEventListener("pointercancel", endRailPointer);
+  controls.track.addEventListener("lostpointercapture", endRailPointer);
+});
+
+elements.moduleSeed.addEventListener("input", () => {
+  state.moduleSeed = Number(elements.moduleSeed.value);
+  render();
 });
 
 elements.moduleMergeOptions.forEach((button) => {

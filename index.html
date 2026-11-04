@@ -7,9 +7,9 @@
     <meta name="description" content="QR code generator with SVG and PNG export.">
     <title>QR Generator</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=20261104-21">
+    <link rel="stylesheet" href="styles.css?v=20261104-23">
     <script src="vendor/qrcode.js" defer></script>
-    <script src="script.js?v=20261104-37" defer></script>
+    <script src="script.js?v=20261104-39" defer></script>
   </head>
   <body>
     <main>
@@ -53,6 +53,13 @@
                 <option value="H">High · 30%</option>
               </select>
             </label>
+            <label id="moduleSeedField" class="field seed-field" for="moduleSeed" hidden>
+              <span>Seed</span>
+              <span class="range-control">
+                <input id="moduleSeed" type="range" min="0" max="4294967295" step="1" value="0">
+                <output id="moduleSeedValue" for="moduleSeed">0</output>
+              </span>
+            </label>
           </section>
 
           <section class="module-section" aria-labelledby="moduleTitle">
@@ -78,34 +85,98 @@
                   <option value="circuit-vertical">Circuit (vertical)</option>
                 </select>
               </label>
-              <label class="range-field polygon-property style-property" for="moduleSides">
-                <span>Sides</span>
-                <span class="range-control">
+              <div class="range-field polygon-property style-property">
+                <div class="property-heading">
+                  <label for="moduleSides">Sides</label>
+                  <button type="button" class="shuffle-button" data-module-random="moduleSides" aria-label="Randomize module sides" aria-pressed="false" aria-controls="moduleSidesControl moduleSidesRandomControl" title="Randomize sides">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18 3 3 3-3 3m0 6 3 3-3 3M3 6h2c5 0 9 12 14 12h2M3 18h2c5 0 9-12 14-12h2"/></svg>
+                  </button>
+                </div>
+                <span id="moduleSidesControl" class="range-control">
                   <input id="moduleSides" type="range" min="3" max="9" step="1" value="4" aria-label="Module polygon sides">
                   <output id="moduleSidesValue" for="moduleSides">4</output>
                 </span>
-              </label>
-              <label class="range-field module-size-field style-property" for="moduleScale">
-                <span>Size</span>
-                <span class="range-control">
+                <div id="moduleSidesRandomControl" class="random-range" data-module-random-range="moduleSides" role="group" aria-label="Random module sides range" hidden>
+                  <div class="random-range-track">
+                    <span class="random-range-rail" aria-hidden="true"></span>
+                    <input id="moduleSidesMin" type="range" min="3" max="9" step="1" value="3" data-bound="min" aria-label="Minimum random module sides">
+                    <input id="moduleSidesMax" type="range" min="3" max="9" step="1" value="9" data-bound="max" aria-label="Maximum random module sides">
+                  </div>
+                  <div class="random-range-values">
+                    <span>Min <output data-bound-value="min" for="moduleSidesMin">3</output></span>
+                    <span>Max <output data-bound-value="max" for="moduleSidesMax">9</output></span>
+                  </div>
+                </div>
+              </div>
+              <div class="range-field module-size-field style-property">
+                <div class="property-heading">
+                  <label for="moduleScale">Size</label>
+                  <button type="button" class="shuffle-button" data-module-random="moduleScale" aria-label="Randomize module size" aria-pressed="false" aria-controls="moduleScaleControl moduleScaleRandomControl" title="Randomize size">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18 3 3 3-3 3m0 6 3 3-3 3M3 6h2c5 0 9 12 14 12h2M3 18h2c5 0 9-12 14-12h2"/></svg>
+                  </button>
+                </div>
+                <span id="moduleScaleControl" class="range-control">
                   <input id="moduleScale" type="range" min="70" max="100" step="1" value="100">
                   <output id="moduleScaleValue" for="moduleScale">100%</output>
                 </span>
-              </label>
-              <label class="range-field polygon-property style-property" for="moduleCornerRadius">
-                <span>Corner radius</span>
-                <span class="range-control">
+                <div id="moduleScaleRandomControl" class="random-range" data-module-random-range="moduleScale" role="group" aria-label="Random module size range" hidden>
+                  <div class="random-range-track">
+                    <span class="random-range-rail" aria-hidden="true"></span>
+                    <input id="moduleScaleMin" type="range" min="70" max="100" step="1" value="70" data-bound="min" aria-label="Minimum random module size">
+                    <input id="moduleScaleMax" type="range" min="70" max="100" step="1" value="100" data-bound="max" aria-label="Maximum random module size">
+                  </div>
+                  <div class="random-range-values">
+                    <span>Min <output data-bound-value="min" for="moduleScaleMin">70%</output></span>
+                    <span>Max <output data-bound-value="max" for="moduleScaleMax">100%</output></span>
+                  </div>
+                </div>
+              </div>
+              <div class="range-field polygon-property style-property">
+                <div class="property-heading">
+                  <label for="moduleCornerRadius">Corner radius</label>
+                  <button type="button" class="shuffle-button" data-module-random="moduleCornerRadius" aria-label="Randomize module corner radius" aria-pressed="false" aria-controls="moduleCornerRadiusControl moduleCornerRadiusRandomControl" title="Randomize corner radius">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18 3 3 3-3 3m0 6 3 3-3 3M3 6h2c5 0 9 12 14 12h2M3 18h2c5 0 9-12 14-12h2"/></svg>
+                  </button>
+                </div>
+                <span id="moduleCornerRadiusControl" class="range-control">
                   <input id="moduleCornerRadius" type="range" min="0" max="100" step="1" value="0" aria-label="Module corner radius">
                   <output id="moduleCornerRadiusValue" for="moduleCornerRadius">0%</output>
                 </span>
-              </label>
-              <label class="range-field polygon-property style-property" for="moduleRotation">
-                <span>Rotation</span>
-                <span class="range-control">
+                <div id="moduleCornerRadiusRandomControl" class="random-range" data-module-random-range="moduleCornerRadius" role="group" aria-label="Random module corner radius range" hidden>
+                  <div class="random-range-track">
+                    <span class="random-range-rail" aria-hidden="true"></span>
+                    <input id="moduleCornerRadiusMin" type="range" min="0" max="100" step="1" value="0" data-bound="min" aria-label="Minimum random module corner radius">
+                    <input id="moduleCornerRadiusMax" type="range" min="0" max="100" step="1" value="100" data-bound="max" aria-label="Maximum random module corner radius">
+                  </div>
+                  <div class="random-range-values">
+                    <span>Min <output data-bound-value="min" for="moduleCornerRadiusMin">0%</output></span>
+                    <span>Max <output data-bound-value="max" for="moduleCornerRadiusMax">100%</output></span>
+                  </div>
+                </div>
+              </div>
+              <div class="range-field polygon-property style-property">
+                <div class="property-heading">
+                  <label for="moduleRotation">Rotation</label>
+                  <button type="button" class="shuffle-button" data-module-random="moduleRotation" aria-label="Randomize module rotation" aria-pressed="false" aria-controls="moduleRotationControl moduleRotationRandomControl" title="Randomize rotation">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18 3 3 3-3 3m0 6 3 3-3 3M3 6h2c5 0 9 12 14 12h2M3 18h2c5 0 9-12 14-12h2"/></svg>
+                  </button>
+                </div>
+                <span id="moduleRotationControl" class="range-control">
                   <input id="moduleRotation" type="range" min="0" max="360" step="1" value="0" aria-label="Module rotation">
                   <output id="moduleRotationValue" for="moduleRotation">0°</output>
                 </span>
-              </label>
+                <div id="moduleRotationRandomControl" class="random-range" data-module-random-range="moduleRotation" role="group" aria-label="Random module rotation range" hidden>
+                  <div class="random-range-track">
+                    <span class="random-range-rail" aria-hidden="true"></span>
+                    <input id="moduleRotationMin" type="range" min="0" max="360" step="1" value="0" data-bound="min" aria-label="Minimum random module rotation">
+                    <input id="moduleRotationMax" type="range" min="0" max="360" step="1" value="360" data-bound="max" aria-label="Maximum random module rotation">
+                  </div>
+                  <div class="random-range-values">
+                    <span>Min <output data-bound-value="min" for="moduleRotationMin">0°</output></span>
+                    <span>Max <output data-bound-value="max" for="moduleRotationMax">360°</output></span>
+                  </div>
+                </div>
+              </div>
               <div class="range-field polygon-property style-property" role="group" aria-labelledby="moduleMergeLabel">
                 <span id="moduleMergeLabel">Merge</span>
                 <div class="merge-control">
