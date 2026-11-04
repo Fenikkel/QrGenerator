@@ -9,7 +9,7 @@
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles.css?v=20261104-2">
     <script src="vendor/qrcode.js" defer></script>
-    <script src="script.js?v=20261104-2" defer></script>
+    <script src="script.js?v=20261104-16" defer></script>
   </head>
   <body>
     <main>
@@ -22,19 +22,59 @@
           <section class="controls appearance-controls" aria-label="QR appearance">
             <div class="style-controls">
               <div class="style-group">
-                <label class="field" for="markerStyle">
-                  <span>Marker</span>
-                  <select id="markerStyle">
+                <label class="field" for="outerMarkerStyle">
+                  <span>Outer Marker</span>
+                  <select id="outerMarkerStyle">
                     <option value="square">Square</option>
                     <option value="rounded" selected>Rounded</option>
+                    <option value="outer-rounded">Rounded (outer)</option>
+                    <option value="inner-rounded">Rounded (inner)</option>
+                    <option value="opposite-inward-rounded">Rounded pair (inward)</option>
+                    <option value="opposite-outward-rounded">Rounded pair (outward)</option>
                     <option value="circle">Circle</option>
                   </select>
                 </label>
                 <div class="color-field style-property">
-                  <label for="markerColor">Color</label>
+                  <label for="outerMarkerColor">Color</label>
                   <span class="color-input-wrap">
-                    <input id="markerColor" type="color" value="#202020" aria-label="Marker color">
-                    <input id="markerColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Marker hex color value">
+                    <input id="outerMarkerColor" type="color" value="#202020" aria-label="Outer marker color">
+                    <input id="outerMarkerColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Outer marker hex color value">
+                  </span>
+                </div>
+                <label class="toggle-field style-property" for="cutOuterMarkerCorners">
+                  <span>Cut corners</span>
+                  <span class="toggle-switch">
+                    <input id="cutOuterMarkerCorners" type="checkbox" aria-label="Cut outer marker corners">
+                    <span class="toggle-track" aria-hidden="true"></span>
+                  </span>
+                </label>
+                <label class="toggle-field style-property" for="outerMarkerCornersOnly">
+                  <span>Corners only</span>
+                  <span class="toggle-switch">
+                    <input id="outerMarkerCornersOnly" type="checkbox" aria-label="Show only outer marker corners">
+                    <span class="toggle-track" aria-hidden="true"></span>
+                  </span>
+                </label>
+              </div>
+
+              <div class="style-group">
+                <label class="field" for="innerMarkerStyle">
+                  <span>Inner Marker</span>
+                  <select id="innerMarkerStyle">
+                    <option value="square">Square</option>
+                    <option value="rounded" selected>Rounded</option>
+                    <option value="outer-rounded">Rounded (outer)</option>
+                    <option value="inner-rounded">Rounded (inner)</option>
+                    <option value="opposite-inward-rounded">Rounded pair (inward)</option>
+                    <option value="opposite-outward-rounded">Rounded pair (outward)</option>
+                    <option value="circle">Circle</option>
+                  </select>
+                </label>
+                <div class="color-field style-property">
+                  <label for="innerMarkerColor">Color</label>
+                  <span class="color-input-wrap">
+                    <input id="innerMarkerColor" type="color" value="#202020" aria-label="Inner marker color">
+                    <input id="innerMarkerColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Inner marker hex color value">
                   </span>
                 </div>
               </div>
@@ -45,9 +85,13 @@
                   <select id="moduleStyle">
                     <option value="square">Square</option>
                     <option value="diamond">Diamond</option>
+                    <option value="hexagon">Hexagon</option>
+                    <option value="cross">Cross</option>
+                    <option value="cross-rotated">Cross (45°)</option>
                     <option value="soft">Soft</option>
                     <option value="rounded">Rounded</option>
                     <option value="dots">Dots</option>
+                    <option value="hearts">Hearts</option>
                     <option value="circuit" selected>Circuit</option>
                   </select>
                 </label>

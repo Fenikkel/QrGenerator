@@ -1,11 +1,15 @@
 const defaults = {
   prefix: "",
   url: "example.com",
-  markerColor: "#202020",
+  outerMarkerColor: "#202020",
+  innerMarkerColor: "#202020",
   moduleColor: "#202020",
   errorCorrection: "M",
   moduleStyle: "circuit",
-  markerStyle: "rounded",
+  outerMarkerStyle: "rounded",
+  cutOuterMarkerCorners: false,
+  outerMarkerCornersOnly: false,
+  innerMarkerStyle: "rounded",
   moduleScale: 100,
   exportFormat: "svg",
   exportSize: "256",
@@ -41,12 +45,17 @@ const elements = {
   nextVersion: document.querySelector("#nextVersion"),
   errorCorrection: document.querySelector("#errorCorrection"),
   moduleStyle: document.querySelector("#moduleStyle"),
-  markerStyle: document.querySelector("#markerStyle"),
+  outerMarkerStyle: document.querySelector("#outerMarkerStyle"),
+  cutOuterMarkerCorners: document.querySelector("#cutOuterMarkerCorners"),
+  outerMarkerCornersOnly: document.querySelector("#outerMarkerCornersOnly"),
+  innerMarkerStyle: document.querySelector("#innerMarkerStyle"),
   moduleScaleField: document.querySelector(".module-size-field"),
   moduleScale: document.querySelector("#moduleScale"),
   moduleScaleValue: document.querySelector("#moduleScaleValue"),
-  markerColor: document.querySelector("#markerColor"),
-  markerColorValue: document.querySelector("#markerColorValue"),
+  outerMarkerColor: document.querySelector("#outerMarkerColor"),
+  outerMarkerColorValue: document.querySelector("#outerMarkerColorValue"),
+  innerMarkerColor: document.querySelector("#innerMarkerColor"),
+  innerMarkerColorValue: document.querySelector("#innerMarkerColorValue"),
   moduleColor: document.querySelector("#moduleColor"),
   moduleColorValue: document.querySelector("#moduleColorValue"),
   logoInput: document.querySelector("#logoInput"),
@@ -229,8 +238,8 @@ function createQr(value, mode) {
   return code;
 }
 
-function formatNumber(value) {
-  return Number(value.toFixed(2)).toString();
+function formatNumber(value, precision = 2) {
+  return Number(value.toFixed(precision)).toString();
 }
 
 function roundedRectCommand(x, y, width, height, radius) {
@@ -246,25 +255,79 @@ function roundedRectCommand(x, y, width, height, radius) {
 }
 
 function circleCommand(centerX, centerY, radius) {
-  const left = formatNumber(centerX - radius);
-  const right = formatNumber(centerX + radius);
-  const center = formatNumber(centerY);
-  const r = formatNumber(radius);
-  return `M${right} ${center}A${r} ${r} 0 1 1 ${left} ${center}A${r} ${r} 0 1 1 ${right} ${center}Z`;
+  const r = formatNumber(radius, 4);
+  const right = formatNumber(centerX + Number(r), 4);
+  const center = formatNumber(centerY, 4);
+  // Relative quarter-arcs avoid rounding mismatches between radius and endpoints.
+  return `M${right} ${center}a${r} ${r} 0 0 1 -${r} ${r}a${r} ${r} 0 0 1 -${r} -${r}a${r} ${r} 0 0 1 ${r} -${r}a${r} ${r} 0 0 1 ${r} ${r}Z`;
 }
 
-function getModuleScale(style = state.moduleStyle) {
-  const scale = state.moduleScale / 100;
-  // Circular modules need a small permanent gap so adjacent dots never merge.
-  return style === "dots" ? scale * .9 : scale;
+function getModuleScale() {
+  return state.moduleScale / 100;
+}
+
+function crossModulePoints(centerX, centerY, size, rotated) {
+  const half = size / 2;
+  const arm = size / 6;
+  const points = [
+    [-arm, -half], [arm, -half], [arm, -arm], [half, -arm],
+    [half, arm], [arm, arm], [arm, half], [-arm, half],
+    [-arm, arm], [-half, arm], [-half, -arm], [-arm, -arm],
+  ];
+  return points.map(([dx, dy]) => (
+    rotated
+      ? [centerX + (dx - dy) * Math.SQRT1_2, centerY + (dx + dy) * Math.SQRT1_2]
+      : [centerX + dx, centerY + dy]
+  ));
+}
+
+function hexagonModulePoints(centerX, centerY, size) {
+  const half = size / 2;
+  const quarter = size / 4;
+  const height = size * Math.sqrt(3) / 4;
+  return [
+    [-half, 0], [-quarter, -height], [quarter, -height],
+    [half, 0], [quarter, height], [-quarter, height],
+  ].map(([dx, dy]) => [centerX + dx, centerY + dy]);
+}
+
+function heartModuleGeometry(x, y, size) {
+  const top = y + size * .07;
+  const curves = [
+    [.45, .045, .36, 0, .27, 0],
+    [.12, 0, 0, .12, 0, .265],
+    [0, .47, .21, .67, .5, .86],
+    [.79, .67, 1, .47, 1, .265],
+    [1, .12, .88, 0, .73, 0],
+    [.64, 0, .55, .045, .5, .145],
+  ];
+  return {
+    start: [x + size * .5, top + size * .145],
+    curves: curves.map((curve) => curve.map((value, index) => (
+      (index % 2 === 0 ? x : top) + value * size
+    ))),
+  };
 }
 
 function moduleCommand(x, y, style) {
-  const size = getModuleScale(style);
+  const size = getModuleScale();
   const inset = (1 - size) / 2;
   const left = x + inset;
   const top = y + inset;
 
+  if (style === "hearts") {
+    const { start, curves } = heartModuleGeometry(left, top, size);
+    const coordinates = (points) => points.map((value) => formatNumber(value, 4)).join(" ");
+    return `M${coordinates(start)}${curves.map((curve) => `C${coordinates(curve)}`).join("")}Z`;
+  }
+  if (["cross", "cross-rotated", "hexagon"].includes(style)) {
+    const points = style === "hexagon"
+      ? hexagonModulePoints(x + .5, y + .5, size)
+      : crossModulePoints(x + .5, y + .5, size, style === "cross-rotated");
+    return points.map(([px, py], index) => (
+      `${index === 0 ? "M" : "L"}${formatNumber(px, 4)} ${formatNumber(py, 4)}`
+    )).join("") + "Z";
+  }
   if (style === "diamond") {
     const centerX = formatNumber(x + .5);
     const centerY = formatNumber(y + .5);
@@ -291,7 +354,7 @@ function getCircuitWidth() {
 
 function moduleIntersectsBox(row, column, quietZone, box, style = state.moduleStyle) {
   if (!box) return false;
-  const size = style === "circuit" ? getCircuitWidth() : getModuleScale(style);
+  const size = style === "circuit" ? getCircuitWidth() : getModuleScale();
   const inset = (1 - size) / 2;
   const left = column + quietZone + inset;
   const top = row + quietZone + inset;
@@ -398,6 +461,91 @@ function markerPositions(code, quietZone = QUIET_ZONE) {
   ];
 }
 
+function cornerRoundedRectCommand(x, y, size, radius, markerIndex, inward) {
+  const flipX = (markerIndex === 1) !== inward;
+  const flipY = (markerIndex === 2) !== inward;
+  const point = (dx, dy) => {
+    const px = x + (flipX ? size - dx : dx);
+    const py = y + (flipY ? size - dy : dy);
+    return `${formatNumber(px)} ${formatNumber(py)}`;
+  };
+  return `M${point(radius, 0)}L${point(size, 0)}L${point(size, size)}L${point(0, size)}L${point(0, radius)}Q${point(0, 0)} ${point(radius, 0)}Z`;
+}
+
+function oppositeCornersRectCommand(x, y, size, radius, reverse) {
+  const point = (dx, dy) => (
+    `${formatNumber(x + (reverse ? size - dx : dx))} ${formatNumber(y + dy)}`
+  );
+  return `M${point(radius, 0)}L${point(size, 0)}L${point(size, size - radius)}Q${point(size, size)} ${point(size - radius, size)}L${point(0, size)}L${point(0, radius)}Q${point(0, 0)} ${point(radius, 0)}Z`;
+}
+
+function hasOuterMarkerClip() {
+  return state.cutOuterMarkerCorners || state.outerMarkerCornersOnly;
+}
+
+function outerMarkerClipCommand(x, y, scale = 1) {
+  const third = 7 * scale / 3;
+  const nearX = formatNumber(x + third, 4);
+  const farX = formatNumber(x + 2 * third, 4);
+  const nearY = formatNumber(y + third, 4);
+  const farY = formatNumber(y + 2 * third, 4);
+  const left = formatNumber(x, 4);
+  const right = formatNumber(x + 7 * scale, 4);
+  const top = formatNumber(y, 4);
+  const bottom = formatNumber(y + 7 * scale, 4);
+  if (state.outerMarkerCornersOnly) {
+    return `M${left} ${top}H${nearX}V${nearY}H${left}Z`
+      + `M${farX} ${top}H${right}V${nearY}H${farX}Z`
+      + `M${left} ${farY}H${nearX}V${bottom}H${left}Z`
+      + `M${farX} ${farY}H${right}V${bottom}H${farX}Z`;
+  }
+  return `M${nearX} ${top}H${farX}V${nearY}H${right}V${farY}H${farX}V${bottom}H${nearX}V${farY}H${left}V${nearY}H${nearX}Z`;
+}
+
+function getMarkerClips(code) {
+  if (!hasOuterMarkerClip()) return [];
+  return markerPositions(code).map(([x, y], markerIndex) => ({
+    id: `outer-marker-cut-${markerIndex}`,
+    d: outerMarkerClipCommand(x, y),
+  }));
+}
+
+function getMarkerShape(x, y, markerIndex, part, scale = 1) {
+  const outer = part === "outer";
+  const style = state[`${part}MarkerStyle`];
+  const color = state[`${part}MarkerColor`];
+  const inset = (outer ? .5 : 2) * scale;
+  const size = (outer ? 6 : 3) * scale;
+  const radius = (outer ? 1.25 : .8) * scale;
+  const attributes = outer
+    ? {
+      fill: "none", stroke: color, "stroke-width": scale,
+      ...(hasOuterMarkerClip() ? { "clip-path": `url(#outer-marker-cut-${markerIndex})` } : {}),
+    }
+    : { fill: color };
+
+  if (style === "circle") {
+    return { tag: "circle", attributes: { ...attributes, cx: x + 3.5 * scale, cy: y + 3.5 * scale, r: size / 2 } };
+  }
+  if (["outer-rounded", "inner-rounded"].includes(style)) {
+    return {
+      tag: "path",
+      attributes: { ...attributes, d: cornerRoundedRectCommand(x + inset, y + inset, size, radius, markerIndex, style === "inner-rounded") },
+    };
+  }
+  if (["opposite-inward-rounded", "opposite-outward-rounded"].includes(style)) {
+    const reverse = (markerIndex !== 0) !== (style === "opposite-outward-rounded");
+    return {
+      tag: "path",
+      attributes: { ...attributes, d: oppositeCornersRectCommand(x + inset, y + inset, size, radius, reverse) },
+    };
+  }
+  return {
+    tag: "rect",
+    attributes: { ...attributes, x: x + inset, y: y + inset, width: size, height: size, rx: style === "rounded" ? radius : 0 },
+  };
+}
+
 function setAttributes(node, attributes) {
   Object.entries(attributes).forEach(([name, value]) => node.setAttribute(name, value));
   return node;
@@ -435,29 +583,23 @@ function appendSvgModules(svg, code) {
 }
 
 function appendSvgMarkers(svg, code) {
-  markerPositions(code).forEach(([x, y]) => {
-    let outer;
-    let center;
-
-    if (state.markerStyle === "circle") {
-      outer = setAttributes(document.createElementNS(SVG_NAMESPACE, "circle"), {
-        cx: x + 3.5, cy: y + 3.5, r: 3, fill: "none", stroke: state.markerColor, "stroke-width": 1,
+  const clips = getMarkerClips(code);
+  if (clips.length) {
+    const definitions = document.createElementNS(SVG_NAMESPACE, "defs");
+    clips.forEach(({ id, d }) => {
+      const clip = setAttributes(document.createElementNS(SVG_NAMESPACE, "clipPath"), {
+        id, clipPathUnits: "userSpaceOnUse",
       });
-      center = setAttributes(document.createElementNS(SVG_NAMESPACE, "circle"), {
-        cx: x + 3.5, cy: y + 3.5, r: 1.5, fill: state.markerColor,
-      });
-    } else {
-      const rounded = state.markerStyle === "rounded";
-      outer = setAttributes(document.createElementNS(SVG_NAMESPACE, "rect"), {
-        x: x + .5, y: y + .5, width: 6, height: 6, rx: rounded ? 1.25 : 0,
-        fill: "none", stroke: state.markerColor, "stroke-width": 1,
-      });
-      center = setAttributes(document.createElementNS(SVG_NAMESPACE, "rect"), {
-        x: x + 2, y: y + 2, width: 3, height: 3, rx: rounded ? .8 : 0, fill: state.markerColor,
-      });
-    }
-
-    svg.append(outer, center);
+      clip.append(setAttributes(document.createElementNS(SVG_NAMESPACE, "path"), { d }));
+      definitions.append(clip);
+    });
+    svg.append(definitions);
+  }
+  markerPositions(code).forEach(([x, y], markerIndex) => {
+    ["outer", "inner"].forEach((part) => {
+      const { tag, attributes } = getMarkerShape(x, y, markerIndex, part);
+      svg.append(setAttributes(document.createElementNS(SVG_NAMESPACE, tag), attributes));
+    });
   });
 }
 
@@ -523,7 +665,10 @@ function render() {
   const result = parseLink(trimmedValue, elements.prefix.value);
   const circuitSelected = state.moduleStyle === "circuit";
   updateEncodingMode(qrMode);
-  elements.markerColorValue.value = state.markerColor.toUpperCase();
+  elements.outerMarkerColorValue.value = state.outerMarkerColor.toUpperCase();
+  elements.cutOuterMarkerCorners.checked = state.cutOuterMarkerCorners;
+  elements.outerMarkerCornersOnly.checked = state.outerMarkerCornersOnly;
+  elements.innerMarkerColorValue.value = state.innerMarkerColor.toUpperCase();
   elements.moduleColorValue.value = state.moduleColor.toUpperCase();
   elements.moduleScaleField.hidden = circuitSelected;
   elements.moduleScale.disabled = circuitSelected;
@@ -575,7 +720,7 @@ function render() {
   elements.preview.setAttribute("viewBox", `0 0 ${dimension} ${dimension}`);
   elements.preview.setAttribute(
     "shape-rendering",
-    state.moduleStyle === "square" && state.markerStyle === "square" ? "crispEdges" : "geometricPrecision",
+    state.moduleStyle === "square" && state.outerMarkerStyle === "square" && state.innerMarkerStyle === "square" && !hasOuterMarkerClip() ? "crispEdges" : "geometricPrecision",
   );
   elements.download.disabled = false;
 }
@@ -734,7 +879,7 @@ elements.errorCorrection.addEventListener("change", () => {
   render();
 });
 
-["moduleStyle", "markerStyle"].forEach((key) => {
+["moduleStyle", "outerMarkerStyle", "innerMarkerStyle"].forEach((key) => {
   elements[key].addEventListener("change", () => {
     state[key] = elements[key].value;
     render();
@@ -744,6 +889,17 @@ elements.errorCorrection.addEventListener("change", () => {
 elements.moduleScale.addEventListener("input", () => {
   state.moduleScale = Number(elements.moduleScale.value);
   render();
+});
+
+[
+  ["cutOuterMarkerCorners", "outerMarkerCornersOnly"],
+  ["outerMarkerCornersOnly", "cutOuterMarkerCorners"],
+].forEach(([key, otherKey]) => {
+  elements[key].addEventListener("change", () => {
+    state[key] = elements[key].checked;
+    if (state[key]) state[otherKey] = false;
+    render();
+  });
 });
 
 elements.logoInput.addEventListener("change", async () => {
@@ -813,7 +969,7 @@ elements.clearLogoArea.addEventListener("change", () => {
   render();
 });
 
-["markerColor", "moduleColor"].forEach((key) => {
+["outerMarkerColor", "innerMarkerColor", "moduleColor"].forEach((key) => {
   const colorInput = elements[key];
   const hexInput = elements[`${key}Value`];
   colorInput.addEventListener("input", () => setColor(key, colorInput.value));
@@ -853,16 +1009,18 @@ function buildSvg(code, size) {
   } else {
     moduleData = `<path d="${modulesToPath(code)}" fill="${state.moduleColor}"/>`;
   }
-  const markerData = markerPositions(code).map(([x, y]) => {
-    if (state.markerStyle === "circle") {
-      return `<circle cx="${x + 3.5}" cy="${y + 3.5}" r="3" fill="none" stroke="${state.markerColor}" stroke-width="1"/><circle cx="${x + 3.5}" cy="${y + 3.5}" r="1.5" fill="${state.markerColor}"/>`;
-    }
-
-    const outerRadius = state.markerStyle === "rounded" ? 1.25 : 0;
-    const centerRadius = state.markerStyle === "rounded" ? .8 : 0;
-    return `<rect x="${x + .5}" y="${y + .5}" width="6" height="6" rx="${outerRadius}" fill="none" stroke="${state.markerColor}" stroke-width="1"/><rect x="${x + 2}" y="${y + 2}" width="3" height="3" rx="${centerRadius}" fill="${state.markerColor}"/>`;
+  const markerData = markerPositions(code).map(([x, y], markerIndex) => {
+    return ["outer", "inner"].map((part) => {
+      const { tag, attributes } = getMarkerShape(x, y, markerIndex, part);
+      const data = Object.entries(attributes).map(([name, value]) => `${name}="${value}"`).join(" ");
+      return `<${tag} ${data}/>`;
+    }).join("");
   }).join("");
-  const rendering = state.moduleStyle === "square" && state.markerStyle === "square"
+  const clipData = getMarkerClips(code).map(({ id, d }) => (
+    `<clipPath id="${id}" clipPathUnits="userSpaceOnUse"><path d="${d}"/></clipPath>`
+  )).join("");
+  const definitions = clipData ? `<defs>${clipData}</defs>` : "";
+  const rendering = state.moduleStyle === "square" && state.outerMarkerStyle === "square" && state.innerMarkerStyle === "square" && !hasOuterMarkerClip()
     ? "crispEdges"
     : "geometricPrecision";
   let logoData = "";
@@ -870,7 +1028,7 @@ function buildSvg(code, size) {
     const box = getLogoBox(code);
     logoData = `<image x="${formatNumber(box.x)}" y="${formatNumber(box.y)}" width="${formatNumber(box.width)}" height="${formatNumber(box.height)}" href="${state.logoDataUrl}" preserveAspectRatio="xMidYMid meet"/>`;
   }
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${dimension} ${dimension}" shape-rendering="${rendering}">${moduleData}${markerData}${logoData}</svg>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${dimension} ${dimension}" shape-rendering="${rendering}">${definitions}${moduleData}${markerData}${logoData}</svg>\n`;
 }
 
 function addRoundedRectPath(context, x, y, width, height, radius) {
@@ -891,6 +1049,24 @@ function addCanvasModule(context, left, top, moduleSize) {
   const renderedSize = moduleSize * scale;
   const inset = (moduleSize - renderedSize) / 2;
 
+  if (state.moduleStyle === "hearts") {
+    const { start, curves } = heartModuleGeometry(left + inset, top + inset, renderedSize);
+    context.moveTo(...start);
+    curves.forEach((curve) => context.bezierCurveTo(...curve));
+    context.closePath();
+    return;
+  }
+  if (["cross", "cross-rotated", "hexagon"].includes(state.moduleStyle)) {
+    const points = state.moduleStyle === "hexagon"
+      ? hexagonModulePoints(left + moduleSize / 2, top + moduleSize / 2, renderedSize)
+      : crossModulePoints(left + moduleSize / 2, top + moduleSize / 2, renderedSize, state.moduleStyle === "cross-rotated");
+    points.forEach(([x, y], index) => {
+      if (index === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    context.closePath();
+    return;
+  }
   if (state.moduleStyle === "diamond") {
     const centerX = left + moduleSize * .5;
     const centerY = top + moduleSize * .5;
@@ -951,53 +1127,37 @@ function drawCanvasCircuit(context, geometry, moduleSize, offset) {
 }
 
 function drawCanvasMarkers(context, code, moduleSize, offset, quietZone) {
-  context.fillStyle = state.markerColor;
-  context.strokeStyle = state.markerColor;
+  context.fillStyle = state.innerMarkerColor;
+  context.strokeStyle = state.outerMarkerColor;
   context.lineWidth = moduleSize;
+  context.lineCap = "butt";
 
-  markerPositions(code, quietZone).forEach(([moduleX, moduleY]) => {
+  markerPositions(code, quietZone).forEach(([moduleX, moduleY], markerIndex) => {
     const x = offset + moduleX * moduleSize;
     const y = offset + moduleY * moduleSize;
 
-    if (state.markerStyle === "circle") {
-      context.beginPath();
-      context.arc(x + moduleSize * 3.5, y + moduleSize * 3.5, moduleSize * 3, 0, Math.PI * 2);
-      context.stroke();
-      context.beginPath();
-      context.arc(x + moduleSize * 3.5, y + moduleSize * 3.5, moduleSize * 1.5, 0, Math.PI * 2);
-      context.fill();
-      return;
-    }
-
-    context.beginPath();
-    if (state.markerStyle === "rounded") {
-      addRoundedRectPath(
-        context,
-        x + moduleSize * .5,
-        y + moduleSize * .5,
-        moduleSize * 6,
-        moduleSize * 6,
-        moduleSize * 1.25,
-      );
-    } else {
-      context.rect(x + moduleSize * .5, y + moduleSize * .5, moduleSize * 6, moduleSize * 6);
-    }
-    context.stroke();
-
-    context.beginPath();
-    if (state.markerStyle === "rounded") {
-      addRoundedRectPath(
-        context,
-        x + moduleSize * 2,
-        y + moduleSize * 2,
-        moduleSize * 3,
-        moduleSize * 3,
-        moduleSize * .8,
-      );
-      context.fill();
-    } else {
-      context.fillRect(x + moduleSize * 2, y + moduleSize * 2, moduleSize * 3, moduleSize * 3);
-    }
+    ["outer", "inner"].forEach((part) => {
+      const { tag, attributes } = getMarkerShape(x, y, markerIndex, part, moduleSize);
+      const draw = part === "outer" ? "stroke" : "fill";
+      context.save();
+      if (part === "outer" && hasOuterMarkerClip()) {
+        context.clip(new Path2D(outerMarkerClipCommand(x, y, moduleSize)));
+      }
+      if (tag === "path") {
+        context[draw](new Path2D(attributes.d));
+      } else {
+        context.beginPath();
+        if (tag === "circle") {
+          context.arc(attributes.cx, attributes.cy, attributes.r, 0, Math.PI * 2);
+        } else if (attributes.rx) {
+          addRoundedRectPath(context, attributes.x, attributes.y, attributes.width, attributes.height, attributes.rx);
+        } else {
+          context.rect(attributes.x, attributes.y, attributes.width, attributes.height);
+        }
+        context[draw]();
+      }
+      context.restore();
+    });
   });
 }
 
