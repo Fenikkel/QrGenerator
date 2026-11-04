@@ -377,6 +377,11 @@ select:focus-visible {
 .merge-control button + button { border-left: 0; }
 .merge-control button:hover { background: #f5f5f5; }
 .merge-control button[aria-pressed="true"] { background: var(--text); color: var(--background); }
+.merge-control button[data-module-merge="square-groups"] {
+  grid-column: 1 / -1;
+  border-top: 0;
+  border-left: 1px solid var(--border);
+}
 
 .figure-control { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .figure-control button {

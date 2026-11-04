@@ -78,6 +78,7 @@ const elements = {
   moduleRotation: document.querySelector("#moduleRotation"),
   moduleRotationValue: document.querySelector("#moduleRotationValue"),
   moduleMergeOptions: document.querySelectorAll("[data-module-merge]"),
+  moduleMergeField: document.querySelector(".module-merge-field"),
   markersAsModules: document.querySelector("#markersAsModules"),
   outerMarkerControls: document.querySelector("#outerMarkerControls"),
   innerMarkerControls: document.querySelector("#innerMarkerControls"),
@@ -312,7 +313,12 @@ function getModuleScale() {
   return state.moduleScale / 100;
 }
 
+function usesSquareGroups(style = state.moduleStyle) {
+  return style === "square-groups" || (style === "regular-polygon" && state.moduleMerge === "square-groups");
+}
+
 function getRandomModuleProperties(style = state.moduleStyle) {
+  if (usesSquareGroups(style)) return [];
   if (style === "regular-polygon") return MODULE_RANGE_PROPERTIES;
   if (style === "figure") return FIGURE_RANGE_PROPERTIES;
   return [];
@@ -903,7 +909,7 @@ function squareGroupsToPath(groups) {
 }
 
 function modulesToPath(code, quietZone = QUIET_ZONE, style = state.moduleStyle) {
-  if (style === "square-groups") return squareGroupsToPath(getSquareGroupGeometry(code, quietZone));
+  if (usesSquareGroups(style)) return squareGroupsToPath(getSquareGroupGeometry(code, quietZone));
   if (style === "regular-polygon") return regularPolygonMergedPath(code, quietZone);
   const count = code.getModuleCount();
   const commands = [];
@@ -1322,8 +1328,10 @@ function render() {
   elements.innerMarkerColorValue.value = state.innerMarkerColor.toUpperCase();
   elements.moduleColorValue.value = state.moduleColor.toUpperCase();
   elements.moduleStyle.value = state.moduleStyle;
-  elements.polygonProperties.forEach((field) => { field.hidden = state.moduleStyle !== "regular-polygon"; });
-  elements.shapeProperties.forEach((field) => { field.hidden = !["regular-polygon", "figure"].includes(state.moduleStyle); });
+  const squareGroups = usesSquareGroups();
+  elements.polygonProperties.forEach((field) => { field.hidden = state.moduleStyle !== "regular-polygon" || squareGroups; });
+  elements.shapeProperties.forEach((field) => { field.hidden = !["regular-polygon", "figure"].includes(state.moduleStyle) || squareGroups; });
+  elements.moduleMergeField.hidden = state.moduleStyle !== "regular-polygon";
   elements.figureProperties.forEach((field) => { field.hidden = state.moduleStyle !== "figure"; });
   elements.moduleFigureOptions.forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.moduleFigure === state.moduleFigure));

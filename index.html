@@ -7,9 +7,9 @@
     <meta name="description" content="QR code generator with SVG and PNG export.">
     <title>QR Generator</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=20261104-24">
+    <link rel="stylesheet" href="styles.css?v=20261104-25">
     <script src="vendor/qrcode.js" defer></script>
-    <script src="script.js?v=20261104-40" defer></script>
+    <script src="script.js?v=20261104-41" defer></script>
   </head>
   <body>
     <main>
@@ -70,7 +70,6 @@
                 <select id="moduleStyle" aria-label="Module style">
                   <option value="regular-polygon" selected>Regular polygon</option>
                   <option value="figure">Figure</option>
-                  <option value="square-groups">Square groups</option>
                 </select>
               </label>
               <div class="range-field polygon-property style-property">
@@ -94,8 +93,7 @@
                   <output data-bound-value="max" for="moduleSidesMax">9</output>
                 </div>
               </div>
-              <div class="range-field figure-property style-property" role="group" aria-labelledby="moduleFormLabel" hidden>
-                <span id="moduleFormLabel">Form</span>
+              <div class="range-field figure-property style-property" role="group" aria-label="Module figure" hidden>
                 <div class="figure-control">
                   <button type="button" data-module-figure="cross" aria-label="Cross" title="Cross" aria-pressed="true"><svg viewBox="0 0 1 1" aria-hidden="true"><path/></svg></button>
                   <button type="button" data-module-figure="heart" aria-label="Heart" title="Heart" aria-pressed="false"><svg viewBox="0 0 1 1" aria-hidden="true"><path/></svg></button>
@@ -165,13 +163,14 @@
                   <output data-bound-value="max" for="moduleRotationMax">360°</output>
                 </div>
               </div>
-              <div class="range-field polygon-property style-property" role="group" aria-labelledby="moduleMergeLabel">
+              <div class="range-field module-merge-field style-property" role="group" aria-labelledby="moduleMergeLabel">
                 <span id="moduleMergeLabel">Merge</span>
                 <div class="merge-control">
                   <button type="button" data-module-merge="none" aria-pressed="true">None</button>
                   <button type="button" data-module-merge="all" aria-pressed="false">All</button>
                   <button type="button" data-module-merge="horizontal" aria-pressed="false">Horizontal</button>
                   <button type="button" data-module-merge="vertical" aria-pressed="false">Vertical</button>
+                  <button type="button" data-module-merge="square-groups" aria-pressed="false">Square groups</button>
                 </div>
               </div>
               <div class="color-field style-property">
