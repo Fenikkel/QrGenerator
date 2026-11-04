@@ -313,12 +313,7 @@ function getModuleScale() {
   return state.moduleScale / 100;
 }
 
-function usesSquareGroups(style = state.moduleStyle) {
-  return style === "square-groups" || (style === "regular-polygon" && state.moduleMerge === "square-groups");
-}
-
 function getRandomModuleProperties(style = state.moduleStyle) {
-  if (usesSquareGroups(style)) return [];
   if (style === "regular-polygon") return MODULE_RANGE_PROPERTIES;
   if (style === "figure") return FIGURE_RANGE_PROPERTIES;
   return [];
@@ -504,8 +499,9 @@ function regularPolygonMergedPath(code, quietZone) {
   const geometries = new Array(count * count);
   const commands = [];
   const exclusionBox = state.clearLogoArea ? getLogoBox(code, quietZone) : null;
-  const horizontal = state.moduleMerge === "all" || state.moduleMerge === "horizontal";
-  const vertical = state.moduleMerge === "all" || state.moduleMerge === "vertical";
+  const squareGroups = state.moduleMerge === "square-groups";
+  const horizontal = squareGroups || state.moduleMerge === "all" || state.moduleMerge === "horizontal";
+  const vertical = squareGroups || state.moduleMerge === "all" || state.moduleMerge === "vertical";
   for (let row = 0; row < count; row += 1) {
     for (let column = 0; column < count; column += 1) {
       if (!shouldRenderModule(code, row, column, quietZone, exclusionBox, "regular-polygon")) continue;
@@ -515,6 +511,20 @@ function regularPolygonMergedPath(code, quietZone) {
     }
   }
   if (!horizontal && !vertical) return commands.join("");
+  const squareConnections = squareGroups ? new Uint8Array(count * count) : null;
+  if (squareGroups) {
+    // Every internal edge in a full n×n square (n >= 2) belongs to a full
+    // 2×2 block. Their union covers all square sizes and allows overlaps.
+    for (let row = 0; row < count - 1; row += 1) {
+      for (let column = 0; column < count - 1; column += 1) {
+        const index = row * count + column;
+        if (!geometries[index] || !geometries[index + 1] || !geometries[index + count] || !geometries[index + count + 1]) continue;
+        squareConnections[index] |= 3; // Right and down.
+        squareConnections[index + 1] |= 2;
+        squareConnections[index + count] |= 1;
+      }
+    }
+  }
   const appendBridge = (row, column, bridge) => {
     const x = column + quietZone;
     const y = row + quietZone;
@@ -538,10 +548,10 @@ function regularPolygonMergedPath(code, quietZone) {
       if (!geometry) continue;
       const right = geometries[row * count + column + 1];
       const down = geometries[(row + 1) * count + column];
-      if (horizontal && column + 1 < count && right) {
+      if (horizontal && column + 1 < count && right && (!squareGroups || (squareConnections[row * count + column] & 1))) {
         appendBridge(row, column, bridgeFor(geometry, right, "horizontal"));
       }
-      if (vertical && row + 1 < count && down) {
+      if (vertical && row + 1 < count && down && (!squareGroups || (squareConnections[row * count + column] & 2))) {
         appendBridge(row, column, bridgeFor(geometry, down, "vertical"));
       }
     }
@@ -856,60 +866,7 @@ function circuitDotPath(geometry) {
   return geometry.dots.map(({ x, y }) => circleCommand(x, y, geometry.width / 2)).join("");
 }
 
-function getSquareGroupGeometry(code, quietZone = QUIET_ZONE) {
-  const count = code.getModuleCount();
-  const scale = getModuleScale();
-  const inset = (1 - scale) / 2;
-  const radius = scale / 2;
-  const exclusionBox = state.clearLogoArea ? getLogoBox(code, quietZone) : null;
-  const squares = Array.from({ length: count + 1 }, () => new Uint16Array(count + 1));
-  // Largest square at each cell already contained in a previously drawn group.
-  const contained = new Uint16Array(count * count);
-  const groups = [];
-  let maximum = 0;
-
-  for (let row = count - 1; row >= 0; row -= 1) {
-    for (let column = count - 1; column >= 0; column -= 1) {
-      if (!shouldRenderModule(code, row, column, quietZone, exclusionBox, "square-groups")) continue;
-      const side = 1 + Math.min(squares[row + 1][column], squares[row][column + 1], squares[row + 1][column + 1]);
-      squares[row][column] = side;
-      maximum = Math.max(maximum, side);
-    }
-  }
-
-  for (let side = maximum; side >= 1; side -= 1) {
-    for (let row = 0; row <= count - side; row += 1) {
-      for (let column = 0; column <= count - side; column += 1) {
-        if (squares[row][column] < side || contained[row * count + column] >= side) continue;
-        const x = column + quietZone + inset;
-        const y = row + quietZone + inset;
-        const size = side - 1 + scale;
-        if (rectangleIntersectsBox(x, y, size, size, exclusionBox)) continue;
-
-        for (let dy = 0; dy < side; dy += 1) {
-          for (let dx = 0; dx < side; dx += 1) {
-            const index = (row + dy) * count + column + dx;
-            contained[index] = Math.max(contained[index], Math.min(side - dy, side - dx));
-          }
-        }
-        groups.push({ row, column, side, x, y, size, radius: Math.min(radius, size / 4) });
-      }
-    }
-  }
-
-  return groups;
-}
-
-function squareGroupsToPath(groups) {
-  return groups.map(({ x, y, size, radius }) => {
-    const r = formatNumber(radius, 4);
-    const span = formatNumber(size - 2 * radius, 4);
-    return `M${formatNumber(x + radius, 4)} ${formatNumber(y, 4)}h${span}a${r} ${r} 0 0 1 ${r} ${r}v${span}a${r} ${r} 0 0 1 -${r} ${r}h-${span}a${r} ${r} 0 0 1 -${r} -${r}v-${span}a${r} ${r} 0 0 1 ${r} -${r}Z`;
-  }).join("");
-}
-
 function modulesToPath(code, quietZone = QUIET_ZONE, style = state.moduleStyle) {
-  if (usesSquareGroups(style)) return squareGroupsToPath(getSquareGroupGeometry(code, quietZone));
   if (style === "regular-polygon") return regularPolygonMergedPath(code, quietZone);
   const count = code.getModuleCount();
   const commands = [];
@@ -1328,9 +1285,8 @@ function render() {
   elements.innerMarkerColorValue.value = state.innerMarkerColor.toUpperCase();
   elements.moduleColorValue.value = state.moduleColor.toUpperCase();
   elements.moduleStyle.value = state.moduleStyle;
-  const squareGroups = usesSquareGroups();
-  elements.polygonProperties.forEach((field) => { field.hidden = state.moduleStyle !== "regular-polygon" || squareGroups; });
-  elements.shapeProperties.forEach((field) => { field.hidden = !["regular-polygon", "figure"].includes(state.moduleStyle) || squareGroups; });
+  elements.polygonProperties.forEach((field) => { field.hidden = state.moduleStyle !== "regular-polygon"; });
+  elements.shapeProperties.forEach((field) => { field.hidden = !["regular-polygon", "figure"].includes(state.moduleStyle); });
   elements.moduleMergeField.hidden = state.moduleStyle !== "regular-polygon";
   elements.figureProperties.forEach((field) => { field.hidden = state.moduleStyle !== "figure"; });
   elements.moduleFigureOptions.forEach((button) => {
@@ -2017,7 +1973,7 @@ function drawQrToCanvas(context, code, size) {
 
   if (isCircuitStyle()) {
     drawCanvasCircuit(context, getCircuitGeometry(code, quietZone), moduleSize, offset);
-  } else if (["square-groups", "regular-polygon", "figure"].includes(state.moduleStyle)) {
+  } else if (["regular-polygon", "figure"].includes(state.moduleStyle)) {
     context.save();
     context.translate(offset, offset);
     context.scale(moduleSize, moduleSize);
