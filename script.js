@@ -262,6 +262,11 @@ function moduleCommand(x, y, style) {
   const left = x + inset;
   const top = y + inset;
 
+  if (style === "diamond") {
+    const centerX = formatNumber(x + .5);
+    const centerY = formatNumber(y + .5);
+    return `M${centerX} ${formatNumber(top)}L${formatNumber(left + size)} ${centerY}L${centerX} ${formatNumber(top + size)}L${formatNumber(left)} ${centerY}Z`;
+  }
   if (style === "dots") return circleCommand(x + .5, y + .5, size / 2);
   if (style === "rounded") return roundedRectCommand(left, top, size, size, size * .35);
   if (style === "soft") return roundedRectCommand(left, top, size, size, size * .16);
@@ -878,6 +883,16 @@ function addCanvasModule(context, left, top, moduleSize) {
   const renderedSize = moduleSize * scale;
   const inset = (moduleSize - renderedSize) / 2;
 
+  if (state.moduleStyle === "diamond") {
+    const centerX = left + moduleSize * .5;
+    const centerY = top + moduleSize * .5;
+    context.moveTo(centerX, top + inset);
+    context.lineTo(left + inset + renderedSize, centerY);
+    context.lineTo(centerX, top + inset + renderedSize);
+    context.lineTo(left + inset, centerY);
+    context.closePath();
+    return;
+  }
   if (state.moduleStyle === "dots") {
     context.moveTo(left + moduleSize * .5 + renderedSize * .5, top + moduleSize * .5);
     context.arc(left + moduleSize * .5, top + moduleSize * .5, renderedSize * .5, 0, Math.PI * 2);
