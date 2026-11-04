@@ -32,6 +32,7 @@ const state = {
 
 const elements = {
   preview: document.querySelector("#qrPreview"),
+  canvasArea: document.querySelector("#canvasArea"),
   prefix: document.querySelector("#prefixSelect"),
   prefixGroup: document.querySelector("#prefixGroup"),
   prefixText: document.querySelector("#prefixText"),
@@ -48,8 +49,6 @@ const elements = {
   errorCorrection: document.querySelector("#errorCorrection"),
   moduleStyle: document.querySelector("#moduleStyle"),
   markersAsModules: document.querySelector("#markersAsModules"),
-  showQrStructure: document.querySelector("#showQrStructure"),
-  qrStructureLegend: document.querySelector("#qrStructureLegend"),
   outerMarkerControls: document.querySelector("#outerMarkerControls"),
   innerMarkerControls: document.querySelector("#innerMarkerControls"),
   outerMarkerStyle: document.querySelector("#outerMarkerStyle"),
@@ -84,16 +83,18 @@ const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const QUIET_ZONE = 4;
 const QR_STRUCTURE_REGIONS = [
   { id: "finder", label: "Finder patterns", color: "#EF4444" },
-  { id: "separators", label: "Separators", color: "#F97316" },
+  { id: "separators", label: "Separators", color: "#10B981" },
   { id: "timing", label: "Timing patterns", color: "#EAB308" },
   { id: "version", label: "Version information", color: "#8B5CF6" },
   { id: "format", label: "Format information", color: "#3B82F6" },
-  { id: "alignment", label: "Alignment patterns", color: "#10B981" },
+  { id: "alignment", label: "Alignment patterns", color: "#D000A7" },
   { id: "quiet", label: "Quiet zone", color: "#06B6D4" },
 ];
 const capacityCache = new Map();
 let toastTimer;
 let logoDragDepth = 0;
+let qrStructurePointerId = null;
+const qrStructureKeys = new Set();
 
 qrcode.stringToBytes = qrcode.stringToBytesFuncs["UTF-8"];
 
@@ -829,29 +830,6 @@ function getQrStructure(code, quietZone = QUIET_ZONE) {
   return { version, dimension, cells, regions };
 }
 
-function renderQrStructureLegend(structure) {
-  elements.qrStructureLegend.replaceChildren();
-  structure.regions.forEach((region) => {
-    const item = document.createElement("li");
-    item.dataset.region = region.id;
-    item.classList.toggle("is-absent", region.count === 0);
-    const swatch = document.createElement("span");
-    swatch.className = "qr-structure-swatch";
-    swatch.style.backgroundColor = region.color;
-    swatch.setAttribute("aria-hidden", "true");
-    const name = document.createElement("span");
-    name.textContent = region.label;
-    if (region.count === 0) {
-      const status = document.createElement("small");
-      status.textContent = `Not present in V${structure.version}`;
-      name.append(" ", status);
-    }
-    item.append(swatch, name);
-    elements.qrStructureLegend.append(item);
-  });
-  elements.qrStructureLegend.hidden = false;
-}
-
 function appendSvgQrStructureGuide(svg, code) {
   if (!state.showQrStructure) return;
   const structure = getQrStructure(code);
@@ -865,11 +843,10 @@ function appendSvgQrStructureGuide(svg, code) {
     }));
   });
   svg.append(guide);
-  renderQrStructureLegend(structure);
 }
 
 function appendSvgLogoGuide(svg, code) {
-  if (!state.showLogoArea) return;
+  if (!state.showLogoArea || state.showQrStructure) return;
   const box = getLogoBox(code);
   const guide = setAttributes(document.createElementNS(SVG_NAMESPACE, "rect"), {
     x: formatNumber(box.x),
@@ -881,12 +858,38 @@ function appendSvgLogoGuide(svg, code) {
   svg.append(guide);
 }
 
+function syncLogoGuideControl() {
+  elements.showLogoArea.disabled = state.showQrStructure;
+  elements.showLogoArea.checked = state.showLogoArea && !state.showQrStructure;
+}
+
+function updateQrStructureHold() {
+  const visible = Boolean(state.qr && (qrStructurePointerId !== null || qrStructureKeys.size));
+  if (state.showQrStructure === visible) return;
+  state.showQrStructure = visible;
+  syncLogoGuideControl();
+  elements.preview.querySelectorAll(".qr-structure-guide, .logo-area-guide").forEach((guide) => guide.remove());
+  if (!state.qr) return;
+  appendSvgQrStructureGuide(elements.preview, state.qr);
+  appendSvgLogoGuide(elements.preview, state.qr);
+}
+
+function releaseQrStructureHold() {
+  const pointerId = qrStructurePointerId;
+  qrStructurePointerId = null;
+  qrStructureKeys.clear();
+  if (pointerId !== null && elements.canvasArea.hasPointerCapture(pointerId)) {
+    elements.canvasArea.releasePointerCapture(pointerId);
+  }
+  updateQrStructureHold();
+}
+
 function clearPreview() {
+  releaseQrStructureHold();
+  elements.canvasArea.style.removeProperty("--checkerboard-size");
   elements.preview.replaceChildren();
   elements.preview.removeAttribute("viewBox");
   elements.preview.removeAttribute("shape-rendering");
-  elements.qrStructureLegend.replaceChildren();
-  elements.qrStructureLegend.hidden = true;
 }
 
 function setValidation(message = "") {
@@ -902,8 +905,7 @@ function render() {
   const trimmedValue = elements.url.value.trim();
   const qrMode = getQrMode(trimmedValue, elements.prefix.value);
   const result = parseLink(trimmedValue, elements.prefix.value);
-  elements.showQrStructure.checked = state.showQrStructure;
-  elements.qrStructureLegend.hidden = true;
+  syncLogoGuideControl();
   elements.markersAsModules.checked = state.markersAsModules;
   elements.outerMarkerControls.hidden = state.markersAsModules;
   elements.innerMarkerControls.hidden = state.markersAsModules;
@@ -953,6 +955,7 @@ function render() {
   setValidation();
   updateVersionInfo(state.qr, result.value, qrMode);
   const dimension = state.qr.getModuleCount() + QUIET_ZONE * 2;
+  elements.canvasArea.style.setProperty("--checkerboard-size", `calc(200% / ${dimension})`);
   elements.preview.replaceChildren();
   appendSvgModules(elements.preview, state.qr);
   appendSvgMarkers(elements.preview, state.qr);
@@ -1125,9 +1128,41 @@ elements.errorCorrection.addEventListener("change", () => {
   });
 });
 
-elements.showQrStructure.addEventListener("change", () => {
-  state.showQrStructure = elements.showQrStructure.checked;
-  render();
+elements.canvasArea.addEventListener("pointerdown", (event) => {
+  if (!state.qr || qrStructurePointerId !== null || !event.isPrimary || event.button !== 0) return;
+  event.preventDefault();
+  qrStructurePointerId = event.pointerId;
+  elements.canvasArea.setPointerCapture(event.pointerId);
+  updateQrStructureHold();
+});
+
+function finishQrStructurePointer(event) {
+  if (event.pointerId !== qrStructurePointerId) return;
+  qrStructurePointerId = null;
+  updateQrStructureHold();
+}
+
+window.addEventListener("pointerup", finishQrStructurePointer, true);
+window.addEventListener("pointercancel", finishQrStructurePointer, true);
+elements.canvasArea.addEventListener("lostpointercapture", finishQrStructurePointer);
+elements.canvasArea.addEventListener("contextmenu", (event) => {
+  if (state.showQrStructure) event.preventDefault();
+});
+elements.canvasArea.addEventListener("keydown", (event) => {
+  if (!state.qr || (event.key !== " " && event.key !== "Enter")) return;
+  event.preventDefault();
+  qrStructureKeys.add(event.key);
+  updateQrStructureHold();
+});
+window.addEventListener("keyup", (event) => {
+  if (!qrStructureKeys.delete(event.key)) return;
+  event.preventDefault();
+  updateQrStructureHold();
+}, true);
+elements.canvasArea.addEventListener("blur", releaseQrStructureHold);
+window.addEventListener("blur", releaseQrStructureHold);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) releaseQrStructureHold();
 });
 
 elements.markersAsModules.addEventListener("change", () => {

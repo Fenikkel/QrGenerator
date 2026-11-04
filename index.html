@@ -7,30 +7,20 @@
     <meta name="description" content="QR code generator with SVG and PNG export.">
     <title>QR Generator</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=20261104-5">
+    <link rel="stylesheet" href="styles.css?v=20261104-7">
     <script src="vendor/qrcode.js" defer></script>
-    <script src="script.js?v=20261104-24" defer></script>
+    <script src="script.js?v=20261104-26" defer></script>
   </head>
   <body>
     <main>
       <div class="workspace">
         <div class="preview-column">
-          <section id="canvasArea" class="canvas-area" aria-label="QR code preview">
+          <section id="canvasArea" class="canvas-area" tabindex="0" aria-label="QR code preview. Hold to show QR structure." title="Hold to show QR structure">
             <svg id="qrPreview" role="img" aria-label="Generated QR code"></svg>
           </section>
           <div id="qrVersionLabel" class="qr-version-label" aria-live="polite">V1 · 21×21</div>
           <section class="controls appearance-controls" aria-label="QR appearance">
             <div class="style-controls">
-              <div class="structure-guide-controls">
-                <label class="toggle-field" for="showQrStructure">
-                  <span>Show QR structure</span>
-                  <span class="toggle-switch">
-                    <input id="showQrStructure" type="checkbox" aria-controls="qrStructureLegend">
-                    <span class="toggle-track" aria-hidden="true"></span>
-                  </span>
-                </label>
-                <ul id="qrStructureLegend" class="qr-structure-legend" aria-label="QR structure legend" hidden></ul>
-              </div>
               <label class="toggle-field marker-mode-toggle" for="markersAsModules">
                 <span>Markers as modules</span>
                 <span class="toggle-switch">
