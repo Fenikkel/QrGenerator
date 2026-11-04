@@ -15,6 +15,7 @@ const defaults = {
   moduleSides: 4,
   moduleCornerRadius: 0,
   moduleRotation: 0,
+  moduleMerge: "none",
   exportFormat: "svg",
   exportSize: "256",
   logoSize: 20,
@@ -59,6 +60,7 @@ const elements = {
   moduleCornerRadiusValue: document.querySelector("#moduleCornerRadiusValue"),
   moduleRotation: document.querySelector("#moduleRotation"),
   moduleRotationValue: document.querySelector("#moduleRotationValue"),
+  moduleMergeOptions: document.querySelectorAll("[data-module-merge]"),
   markersAsModules: document.querySelector("#markersAsModules"),
   outerMarkerControls: document.querySelector("#outerMarkerControls"),
   innerMarkerControls: document.querySelector("#innerMarkerControls"),
@@ -342,6 +344,11 @@ function getRegularPolygonGeometry() {
   const shiftX = .5 - (left + right) * factor / 2;
   const shiftY = .5 - (top + bottom) * factor / 2;
   const transform = ([x, y]) => [x * factor + shiftX, y * factor + shiftY];
+  const supportPoint = (axis, extreme) => {
+    const candidates = points.filter((point) => Math.abs(point[axis] - extreme) < 1e-10);
+    const point = candidates.reduce((best, candidate) => candidate[1 - axis] < best[1 - axis] ? candidate : best);
+    return transform(point);
+  };
   const geometry = {
     start: transform(start),
     segments: segments.map((segment) => segment.type === "line"
@@ -353,6 +360,28 @@ function getRegularPolygonGeometry() {
       width: (right - left) * factor,
       height: (bottom - top) * factor,
     },
+    supportPoints: {
+      top: supportPoint(1, top), bottom: supportPoint(1, bottom),
+      left: supportPoint(0, left), right: supportPoint(0, right),
+    },
+  };
+  const bridgeGeometry = (vertices) => {
+    const xs = vertices.map(([x]) => x);
+    const ys = vertices.map(([, y]) => y);
+    const x = Math.min(...xs);
+    const y = Math.min(...ys);
+    return {
+      start: vertices[0], vertices,
+      bounds: { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y },
+      pathTail: vertices.slice(1).map(([x, y], i) => (
+        `l${formatNumber(x - vertices[i][0], 6)} ${formatNumber(y - vertices[i][1], 6)}`
+      )).join("") + "Z",
+    };
+  };
+  const support = geometry.supportPoints;
+  geometry.bridges = {
+    horizontal: bridgeGeometry([support.top, [support.top[0] + 1, support.top[1]], [support.bottom[0] + 1, support.bottom[1]], support.bottom]),
+    vertical: bridgeGeometry([support.left, support.right, [support.right[0], support.right[1] + 1], [support.left[0], support.left[1] + 1]]),
   };
   let previous = geometry.start;
   geometry.pathTail = geometry.segments.map((segment) => {
@@ -369,6 +398,42 @@ function getRegularPolygonGeometry() {
 function regularPolygonCommand(x, y) {
   const geometry = getRegularPolygonGeometry();
   return `M${formatNumber(x + geometry.start[0], 6)} ${formatNumber(y + geometry.start[1], 6)}${geometry.pathTail}`;
+}
+
+function regularPolygonMergedPath(code, quietZone) {
+  const count = code.getModuleCount();
+  const eligible = new Uint8Array(count * count);
+  const commands = [];
+  const exclusionBox = state.clearLogoArea ? getLogoBox(code, quietZone) : null;
+  const { bridges } = getRegularPolygonGeometry();
+  const horizontal = state.moduleMerge === "all" || state.moduleMerge === "horizontal";
+  const vertical = state.moduleMerge === "all" || state.moduleMerge === "vertical";
+  for (let row = 0; row < count; row += 1) {
+    for (let column = 0; column < count; column += 1) {
+      if (!shouldRenderModule(code, row, column, quietZone, exclusionBox, "regular-polygon")) continue;
+      eligible[row * count + column] = 1;
+      commands.push(regularPolygonCommand(column + quietZone, row + quietZone));
+    }
+  }
+  const appendBridge = (row, column, bridge) => {
+    const x = column + quietZone;
+    const y = row + quietZone;
+    const bounds = bridge.bounds;
+    if (rectangleIntersectsBox(x + bounds.x, y + bounds.y, bounds.width, bounds.height, exclusionBox)) return;
+    commands.push(`M${formatNumber(x + bridge.start[0], 6)} ${formatNumber(y + bridge.start[1], 6)}${bridge.pathTail}`);
+  };
+  for (let row = 0; row < count; row += 1) {
+    for (let column = 0; column < count; column += 1) {
+      if (!eligible[row * count + column]) continue;
+      if (horizontal && column + 1 < count && eligible[row * count + column + 1]) {
+        appendBridge(row, column, bridges.horizontal);
+      }
+      if (vertical && row + 1 < count && eligible[(row + 1) * count + column]) {
+        appendBridge(row, column, bridges.vertical);
+      }
+    }
+  }
+  return commands.join("");
 }
 
 function crossModulePoints(centerX, centerY, size, rotated) {
@@ -634,6 +699,7 @@ function squareGroupsToPath(groups) {
 
 function modulesToPath(code, quietZone = QUIET_ZONE, style = state.moduleStyle) {
   if (style === "square-groups") return squareGroupsToPath(getSquareGroupGeometry(code, quietZone));
+  if (style === "regular-polygon" && state.moduleMerge !== "none") return regularPolygonMergedPath(code, quietZone);
   const count = code.getModuleCount();
   const commands = [];
   const exclusionBox = state.clearLogoArea ? getLogoBox(code, quietZone) : null;
@@ -1050,6 +1116,9 @@ function render() {
   elements.moduleColorValue.value = state.moduleColor.toUpperCase();
   elements.moduleStyle.value = state.moduleStyle;
   elements.polygonProperties.forEach((field) => { field.hidden = state.moduleStyle !== "regular-polygon"; });
+  elements.moduleMergeOptions.forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.moduleMerge === state.moduleMerge));
+  });
   MODULE_RANGE_PROPERTIES.forEach(([key, suffix]) => {
     elements[key].value = state[key];
     elements[`${key}Value`].textContent = `${state[key]}${suffix}`;
@@ -1332,6 +1401,15 @@ elements.markersAsModules.addEventListener("change", () => {
 MODULE_RANGE_PROPERTIES.forEach(([key]) => {
   elements[key].addEventListener("input", () => {
     state[key] = Number(elements[key].value);
+    render();
+  });
+});
+
+elements.moduleMergeOptions.forEach((button) => {
+  button.addEventListener("click", () => {
+    const merge = button.dataset.moduleMerge;
+    if (state.moduleMerge === merge) return;
+    state.moduleMerge = merge;
     render();
   });
 });

@@ -7,9 +7,9 @@
     <meta name="description" content="QR code generator with SVG and PNG export.">
     <title>QR Generator</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=20261104-20">
+    <link rel="stylesheet" href="styles.css?v=20261104-21">
     <script src="vendor/qrcode.js" defer></script>
-    <script src="script.js?v=20261104-36" defer></script>
+    <script src="script.js?v=20261104-37" defer></script>
   </head>
   <body>
     <main>
@@ -81,7 +81,7 @@
               <label class="range-field polygon-property style-property" for="moduleSides">
                 <span>Sides</span>
                 <span class="range-control">
-                  <input id="moduleSides" type="range" min="3" max="10" step="1" value="4" aria-label="Module polygon sides">
+                  <input id="moduleSides" type="range" min="3" max="9" step="1" value="4" aria-label="Module polygon sides">
                   <output id="moduleSidesValue" for="moduleSides">4</output>
                 </span>
               </label>
@@ -106,6 +106,15 @@
                   <output id="moduleRotationValue" for="moduleRotation">0°</output>
                 </span>
               </label>
+              <div class="range-field polygon-property style-property" role="group" aria-labelledby="moduleMergeLabel">
+                <span id="moduleMergeLabel">Merge</span>
+                <div class="merge-control">
+                  <button type="button" data-module-merge="none" aria-pressed="true">None</button>
+                  <button type="button" data-module-merge="all" aria-pressed="false">All</button>
+                  <button type="button" data-module-merge="horizontal" aria-pressed="false">Horizontal</button>
+                  <button type="button" data-module-merge="vertical" aria-pressed="false">Vertical</button>
+                </div>
+              </div>
               <div class="color-field style-property">
                 <label for="moduleColor">Color</label>
                 <span class="color-input-wrap">
