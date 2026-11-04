@@ -1,7 +1,8 @@
 const defaults = {
   prefix: "",
   url: "example.com",
-  color: "#202020",
+  markerColor: "#202020",
+  moduleColor: "#202020",
   errorCorrection: "M",
   moduleStyle: "circuit",
   markerStyle: "rounded",
@@ -44,8 +45,10 @@ const elements = {
   moduleScaleField: document.querySelector(".module-size-field"),
   moduleScale: document.querySelector("#moduleScale"),
   moduleScaleValue: document.querySelector("#moduleScaleValue"),
-  color: document.querySelector("#qrColor"),
-  colorValue: document.querySelector("#qrColorValue"),
+  markerColor: document.querySelector("#markerColor"),
+  markerColorValue: document.querySelector("#markerColorValue"),
+  moduleColor: document.querySelector("#moduleColor"),
+  moduleColorValue: document.querySelector("#moduleColorValue"),
   logoInput: document.querySelector("#logoInput"),
   logoDropZone: document.querySelector("#logoDropZone"),
   logoFileName: document.querySelector("#logoFileName"),
@@ -410,7 +413,7 @@ function appendSvgModules(svg, code) {
       svg.append(setAttributes(document.createElementNS(SVG_NAMESPACE, "path"), {
         d: trackData,
         fill: "none",
-        stroke: state.color,
+        stroke: state.moduleColor,
         "stroke-width": formatNumber(geometry.width),
         "stroke-linecap": "round",
         "stroke-linejoin": "round",
@@ -419,7 +422,7 @@ function appendSvgModules(svg, code) {
     if (dotData) {
       svg.append(setAttributes(document.createElementNS(SVG_NAMESPACE, "path"), {
         d: dotData,
-        fill: state.color,
+        fill: state.moduleColor,
       }));
     }
     return;
@@ -427,7 +430,7 @@ function appendSvgModules(svg, code) {
 
   svg.append(setAttributes(document.createElementNS(SVG_NAMESPACE, "path"), {
     d: modulesToPath(code),
-    fill: state.color,
+    fill: state.moduleColor,
   }));
 }
 
@@ -438,19 +441,19 @@ function appendSvgMarkers(svg, code) {
 
     if (state.markerStyle === "circle") {
       outer = setAttributes(document.createElementNS(SVG_NAMESPACE, "circle"), {
-        cx: x + 3.5, cy: y + 3.5, r: 3, fill: "none", stroke: state.color, "stroke-width": 1,
+        cx: x + 3.5, cy: y + 3.5, r: 3, fill: "none", stroke: state.markerColor, "stroke-width": 1,
       });
       center = setAttributes(document.createElementNS(SVG_NAMESPACE, "circle"), {
-        cx: x + 3.5, cy: y + 3.5, r: 1.5, fill: state.color,
+        cx: x + 3.5, cy: y + 3.5, r: 1.5, fill: state.markerColor,
       });
     } else {
       const rounded = state.markerStyle === "rounded";
       outer = setAttributes(document.createElementNS(SVG_NAMESPACE, "rect"), {
         x: x + .5, y: y + .5, width: 6, height: 6, rx: rounded ? 1.25 : 0,
-        fill: "none", stroke: state.color, "stroke-width": 1,
+        fill: "none", stroke: state.markerColor, "stroke-width": 1,
       });
       center = setAttributes(document.createElementNS(SVG_NAMESPACE, "rect"), {
-        x: x + 2, y: y + 2, width: 3, height: 3, rx: rounded ? .8 : 0, fill: state.color,
+        x: x + 2, y: y + 2, width: 3, height: 3, rx: rounded ? .8 : 0, fill: state.markerColor,
       });
     }
 
@@ -520,7 +523,8 @@ function render() {
   const result = parseLink(trimmedValue, elements.prefix.value);
   const circuitSelected = state.moduleStyle === "circuit";
   updateEncodingMode(qrMode);
-  elements.colorValue.value = state.color.toUpperCase();
+  elements.markerColorValue.value = state.markerColor.toUpperCase();
+  elements.moduleColorValue.value = state.moduleColor.toUpperCase();
   elements.moduleScaleField.hidden = circuitSelected;
   elements.moduleScale.disabled = circuitSelected;
   elements.moduleScale.value = state.moduleScale;
@@ -576,9 +580,9 @@ function render() {
   elements.download.disabled = false;
 }
 
-function setColor(value) {
-  state.color = value.toLowerCase();
-  elements.color.value = state.color;
+function setColor(key, value) {
+  state[key] = value.toLowerCase();
+  elements[key].value = state[key];
   render();
 }
 
@@ -809,29 +813,33 @@ elements.clearLogoArea.addEventListener("change", () => {
   render();
 });
 
-elements.color.addEventListener("input", () => setColor(elements.color.value));
+["markerColor", "moduleColor"].forEach((key) => {
+  const colorInput = elements[key];
+  const hexInput = elements[`${key}Value`];
+  colorInput.addEventListener("input", () => setColor(key, colorInput.value));
 
-elements.colorValue.addEventListener("input", () => {
-  const value = elements.colorValue.value.trim();
-  if (!/^#?[\da-f]{6}$/i.test(value)) return;
-  setColor(`#${value.replace("#", "")}`);
-});
+  hexInput.addEventListener("input", () => {
+    const value = hexInput.value.trim();
+    if (!/^#?[\da-f]{6}$/i.test(value)) return;
+    setColor(key, `#${value.replace("#", "")}`);
+  });
 
-elements.colorValue.addEventListener("blur", () => {
-  const value = elements.colorValue.value.trim().replace("#", "");
-  if (/^[\da-f]{3}$/i.test(value)) {
-    setColor(`#${[...value].map((character) => character.repeat(2)).join("")}`);
-  } else {
-    render();
-  }
-});
+  hexInput.addEventListener("blur", () => {
+    const value = hexInput.value.trim().replace("#", "");
+    if (/^[\da-f]{3}$/i.test(value)) {
+      setColor(key, `#${[...value].map((character) => character.repeat(2)).join("")}`);
+    } else {
+      render();
+    }
+  });
 
-elements.colorValue.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") elements.colorValue.blur();
-  if (event.key === "Escape") {
-    elements.colorValue.value = state.color.toUpperCase();
-    elements.colorValue.blur();
-  }
+  hexInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") hexInput.blur();
+    if (event.key === "Escape") {
+      hexInput.value = state[key].toUpperCase();
+      hexInput.blur();
+    }
+  });
 });
 
 function buildSvg(code, size) {
@@ -841,18 +849,18 @@ function buildSvg(code, size) {
     const geometry = getCircuitGeometry(code);
     const trackData = circuitTrackPath(geometry);
     const dotData = circuitDotPath(geometry);
-    moduleData = `${trackData ? `<path d="${trackData}" fill="none" stroke="${state.color}" stroke-width="${formatNumber(geometry.width)}" stroke-linecap="round" stroke-linejoin="round"/>` : ""}${dotData ? `<path d="${dotData}" fill="${state.color}"/>` : ""}`;
+    moduleData = `${trackData ? `<path d="${trackData}" fill="none" stroke="${state.moduleColor}" stroke-width="${formatNumber(geometry.width)}" stroke-linecap="round" stroke-linejoin="round"/>` : ""}${dotData ? `<path d="${dotData}" fill="${state.moduleColor}"/>` : ""}`;
   } else {
-    moduleData = `<path d="${modulesToPath(code)}" fill="${state.color}"/>`;
+    moduleData = `<path d="${modulesToPath(code)}" fill="${state.moduleColor}"/>`;
   }
   const markerData = markerPositions(code).map(([x, y]) => {
     if (state.markerStyle === "circle") {
-      return `<circle cx="${x + 3.5}" cy="${y + 3.5}" r="3" fill="none" stroke="${state.color}" stroke-width="1"/><circle cx="${x + 3.5}" cy="${y + 3.5}" r="1.5" fill="${state.color}"/>`;
+      return `<circle cx="${x + 3.5}" cy="${y + 3.5}" r="3" fill="none" stroke="${state.markerColor}" stroke-width="1"/><circle cx="${x + 3.5}" cy="${y + 3.5}" r="1.5" fill="${state.markerColor}"/>`;
     }
 
     const outerRadius = state.markerStyle === "rounded" ? 1.25 : 0;
     const centerRadius = state.markerStyle === "rounded" ? .8 : 0;
-    return `<rect x="${x + .5}" y="${y + .5}" width="6" height="6" rx="${outerRadius}" fill="none" stroke="${state.color}" stroke-width="1"/><rect x="${x + 2}" y="${y + 2}" width="3" height="3" rx="${centerRadius}" fill="${state.color}"/>`;
+    return `<rect x="${x + .5}" y="${y + .5}" width="6" height="6" rx="${outerRadius}" fill="none" stroke="${state.markerColor}" stroke-width="1"/><rect x="${x + 2}" y="${y + 2}" width="3" height="3" rx="${centerRadius}" fill="${state.markerColor}"/>`;
   }).join("");
   const rendering = state.moduleStyle === "square" && state.markerStyle === "square"
     ? "crispEdges"
@@ -912,8 +920,8 @@ function addCanvasModule(context, left, top, moduleSize) {
 
 function drawCanvasCircuit(context, geometry, moduleSize, offset) {
   context.save();
-  context.strokeStyle = state.color;
-  context.fillStyle = state.color;
+  context.strokeStyle = state.moduleColor;
+  context.fillStyle = state.moduleColor;
   context.lineWidth = geometry.width * moduleSize;
   context.lineCap = "round";
   context.lineJoin = "round";
@@ -943,8 +951,8 @@ function drawCanvasCircuit(context, geometry, moduleSize, offset) {
 }
 
 function drawCanvasMarkers(context, code, moduleSize, offset, quietZone) {
-  context.fillStyle = state.color;
-  context.strokeStyle = state.color;
+  context.fillStyle = state.markerColor;
+  context.strokeStyle = state.markerColor;
   context.lineWidth = moduleSize;
 
   markerPositions(code, quietZone).forEach(([moduleX, moduleY]) => {
@@ -1007,7 +1015,7 @@ function drawQrToCanvas(context, code, size) {
   const exclusionBox = state.clearLogoArea ? getLogoBox(code, quietZone) : null;
 
   context.clearRect(0, 0, size, size);
-  context.fillStyle = state.color;
+  context.fillStyle = state.moduleColor;
 
   if (state.moduleStyle === "circuit") {
     drawCanvasCircuit(context, getCircuitGeometry(code, quietZone), moduleSize, offset);

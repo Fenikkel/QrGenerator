@@ -231,8 +231,16 @@ select:focus-visible {
   gap: 16px;
 }
 
-.module-size-field { margin-top: 16px; margin-inline-start: 16px; }
-.color-controls { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--soft-border); }
+.style-property { margin-top: 16px; margin-inline-start: 16px; }
+
+.color-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.color-field > label { margin-bottom: 0; }
 
 .color-input-wrap {
   height: 44px;
@@ -320,7 +328,8 @@ input[type="range"]::-moz-range-thumb {
 .logo-area-controls > .logo-size-field { margin-inline-start: 16px; }
 .logo-area-controls .toggle-field,
 .logo-size-field > span:first-child,
-.module-size-field > span:first-child {
+.style-property > span:first-child,
+.style-property > label {
   color: var(--muted);
   font-weight: 400;
 }
