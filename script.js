@@ -348,13 +348,17 @@ function isMarkerModule(row, column, count) {
   return (inTop && (inLeft || inRight)) || (inBottom && inLeft);
 }
 
+function isCircuitStyle(style = state.moduleStyle) {
+  return ["circuit", "circuit-horizontal", "circuit-vertical"].includes(style);
+}
+
 function getCircuitWidth() {
   return 1;
 }
 
 function moduleIntersectsBox(row, column, quietZone, box, style = state.moduleStyle) {
   if (!box) return false;
-  const size = style === "circuit" ? getCircuitWidth() : getModuleScale();
+  const size = isCircuitStyle(style) ? getCircuitWidth() : getModuleScale();
   const inset = (1 - size) / 2;
   const left = column + quietZone + inset;
   const top = row + quietZone + inset;
@@ -387,7 +391,7 @@ function circuitSegmentIntersectsBox(x1, y1, x2, y2, width, box) {
   return rectangleIntersectsBox(left, top, segmentWidth, segmentHeight, box);
 }
 
-function getCircuitGeometry(code, quietZone = QUIET_ZONE) {
+function getCircuitGeometry(code, quietZone = QUIET_ZONE, style = state.moduleStyle) {
   const count = code.getModuleCount();
   const width = getCircuitWidth();
   const exclusionBox = state.clearLogoArea ? getLogoBox(code, quietZone) : null;
@@ -395,8 +399,10 @@ function getCircuitGeometry(code, quietZone = QUIET_ZONE) {
   const dots = [];
 
   const hasConnection = (row, column, nextRow, nextColumn) => {
-    if (!shouldRenderModule(code, row, column, quietZone, exclusionBox, "circuit")) return false;
-    if (!shouldRenderModule(code, nextRow, nextColumn, quietZone, exclusionBox, "circuit")) return false;
+    if (style === "circuit-horizontal" && row !== nextRow) return false;
+    if (style === "circuit-vertical" && column !== nextColumn) return false;
+    if (!shouldRenderModule(code, row, column, quietZone, exclusionBox, style)) return false;
+    if (!shouldRenderModule(code, nextRow, nextColumn, quietZone, exclusionBox, style)) return false;
     const x1 = column + quietZone + .5;
     const y1 = row + quietZone + .5;
     const x2 = nextColumn + quietZone + .5;
@@ -406,7 +412,7 @@ function getCircuitGeometry(code, quietZone = QUIET_ZONE) {
 
   for (let row = 0; row < count; row += 1) {
     for (let column = 0; column < count; column += 1) {
-      if (!shouldRenderModule(code, row, column, quietZone, exclusionBox, "circuit")) continue;
+      if (!shouldRenderModule(code, row, column, quietZone, exclusionBox, style)) continue;
       const x = column + quietZone + .5;
       const y = row + quietZone + .5;
       const right = hasConnection(row, column, row, column + 1);
@@ -552,7 +558,7 @@ function setAttributes(node, attributes) {
 }
 
 function appendSvgModules(svg, code) {
-  if (state.moduleStyle === "circuit") {
+  if (isCircuitStyle()) {
     const geometry = getCircuitGeometry(code);
     const trackData = circuitTrackPath(geometry);
     const dotData = circuitDotPath(geometry);
@@ -663,7 +669,7 @@ function render() {
   const trimmedValue = elements.url.value.trim();
   const qrMode = getQrMode(trimmedValue, elements.prefix.value);
   const result = parseLink(trimmedValue, elements.prefix.value);
-  const circuitSelected = state.moduleStyle === "circuit";
+  const circuitSelected = isCircuitStyle();
   updateEncodingMode(qrMode);
   elements.outerMarkerColorValue.value = state.outerMarkerColor.toUpperCase();
   elements.cutOuterMarkerCorners.checked = state.cutOuterMarkerCorners;
@@ -1001,7 +1007,7 @@ elements.clearLogoArea.addEventListener("change", () => {
 function buildSvg(code, size) {
   const dimension = code.getModuleCount() + QUIET_ZONE * 2;
   let moduleData;
-  if (state.moduleStyle === "circuit") {
+  if (isCircuitStyle()) {
     const geometry = getCircuitGeometry(code);
     const trackData = circuitTrackPath(geometry);
     const dotData = circuitDotPath(geometry);
@@ -1177,7 +1183,7 @@ function drawQrToCanvas(context, code, size) {
   context.clearRect(0, 0, size, size);
   context.fillStyle = state.moduleColor;
 
-  if (state.moduleStyle === "circuit") {
+  if (isCircuitStyle()) {
     drawCanvasCircuit(context, getCircuitGeometry(code, quietZone), moduleSize, offset);
   } else {
     if (state.moduleStyle !== "square") context.beginPath();
