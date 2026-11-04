@@ -309,14 +309,43 @@ function heartModuleGeometry(x, y, size) {
   };
 }
 
+function roundedStarModuleGeometry(x, y, size) {
+  const top = y + size * .01;
+  const height = size * .98;
+  const curves = [
+    [.6, 0, .67, .05, .7, .12],
+    [.74, .2, .78, .21, .85, .23],
+    [.95, .25, 1, .32, 1, .43],
+    [1, .5, .96, .55, .92, .61],
+    [.88, .68, .9, .73, .89, .8],
+    [.89, .95, .8, 1, .68, 1],
+    [.61, 1, .57, .95, .5, .95],
+    [.43, .95, .39, 1, .32, 1],
+    [.2, 1, .11, .95, .11, .8],
+    [.1, .73, .12, .68, .08, .61],
+    [.04, .55, 0, .5, 0, .43],
+    [0, .32, .05, .25, .15, .23],
+    [.22, .21, .26, .2, .3, .12],
+    [.33, .05, .4, 0, .5, 0],
+  ];
+  return {
+    start: [x + size * .5, top],
+    curves: curves.map((curve) => curve.map((value, index) => (
+      index % 2 === 0 ? x + value * size : top + value * height
+    ))),
+  };
+}
+
 function moduleCommand(x, y, style) {
   const size = getModuleScale();
   const inset = (1 - size) / 2;
   const left = x + inset;
   const top = y + inset;
 
-  if (style === "hearts") {
-    const { start, curves } = heartModuleGeometry(left, top, size);
+  if (["hearts", "rounded-star"].includes(style)) {
+    const { start, curves } = style === "hearts"
+      ? heartModuleGeometry(left, top, size)
+      : roundedStarModuleGeometry(left, top, size);
     const coordinates = (points) => points.map((value) => formatNumber(value, 4)).join(" ");
     return `M${coordinates(start)}${curves.map((curve) => `C${coordinates(curve)}`).join("")}Z`;
   }
@@ -1052,8 +1081,10 @@ function addCanvasModule(context, left, top, moduleSize) {
   const renderedSize = moduleSize * scale;
   const inset = (moduleSize - renderedSize) / 2;
 
-  if (state.moduleStyle === "hearts") {
-    const { start, curves } = heartModuleGeometry(left + inset, top + inset, renderedSize);
+  if (["hearts", "rounded-star"].includes(state.moduleStyle)) {
+    const { start, curves } = state.moduleStyle === "hearts"
+      ? heartModuleGeometry(left + inset, top + inset, renderedSize)
+      : roundedStarModuleGeometry(left + inset, top + inset, renderedSize);
     context.moveTo(...start);
     curves.forEach((curve) => context.bezierCurveTo(...curve));
     context.closePath();
