@@ -6,6 +6,8 @@ const defaults = {
   moduleColor: "#202020",
   errorCorrection: "M",
   moduleStyle: "circuit",
+  markersAsModules: false,
+  showQrStructure: false,
   outerMarkerStyle: "rounded",
   cutOuterMarkerCorners: false,
   outerMarkerCornersOnly: false,
@@ -45,6 +47,11 @@ const elements = {
   nextVersion: document.querySelector("#nextVersion"),
   errorCorrection: document.querySelector("#errorCorrection"),
   moduleStyle: document.querySelector("#moduleStyle"),
+  markersAsModules: document.querySelector("#markersAsModules"),
+  showQrStructure: document.querySelector("#showQrStructure"),
+  qrStructureLegend: document.querySelector("#qrStructureLegend"),
+  outerMarkerControls: document.querySelector("#outerMarkerControls"),
+  innerMarkerControls: document.querySelector("#innerMarkerControls"),
   outerMarkerStyle: document.querySelector("#outerMarkerStyle"),
   cutOuterMarkerCorners: document.querySelector("#cutOuterMarkerCorners"),
   outerMarkerCornersOnly: document.querySelector("#outerMarkerCornersOnly"),
@@ -75,6 +82,15 @@ const elements = {
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const QUIET_ZONE = 4;
+const QR_STRUCTURE_REGIONS = [
+  { id: "finder", label: "Finder patterns", color: "#EF4444" },
+  { id: "separators", label: "Separators", color: "#F97316" },
+  { id: "timing", label: "Timing patterns", color: "#EAB308" },
+  { id: "version", label: "Version information", color: "#8B5CF6" },
+  { id: "format", label: "Format information", color: "#3B82F6" },
+  { id: "alignment", label: "Alignment patterns", color: "#10B981" },
+  { id: "quiet", label: "Quiet zone", color: "#06B6D4" },
+];
 const capacityCache = new Map();
 let toastTimer;
 let logoDragDepth = 0;
@@ -406,7 +422,7 @@ function shouldRenderModule(code, row, column, quietZone, exclusionBox, style = 
   const count = code.getModuleCount();
   if (row < 0 || column < 0 || row >= count || column >= count) return false;
   return code.isDark(row, column)
-    && !isMarkerModule(row, column, count)
+    && (state.markersAsModules || !isMarkerModule(row, column, count))
     && !moduleIntersectsBox(row, column, quietZone, exclusionBox, style);
 }
 
@@ -571,6 +587,12 @@ function hasOuterMarkerClip() {
   return state.cutOuterMarkerCorners || state.outerMarkerCornersOnly;
 }
 
+function getShapeRendering() {
+  const squareMarkers = state.markersAsModules
+    || (state.outerMarkerStyle === "square" && state.innerMarkerStyle === "square" && !hasOuterMarkerClip());
+  return state.moduleStyle === "square" && squareMarkers ? "crispEdges" : "geometricPrecision";
+}
+
 function outerMarkerClipCommand(x, y, scale = 1) {
   const third = 7 * scale / 3;
   const nearX = formatNumber(x + third, 4);
@@ -591,7 +613,7 @@ function outerMarkerClipCommand(x, y, scale = 1) {
 }
 
 function getMarkerClips(code) {
-  if (!hasOuterMarkerClip()) return [];
+  if (state.markersAsModules || !hasOuterMarkerClip()) return [];
   return markerPositions(code).map(([x, y], markerIndex) => ({
     id: `outer-marker-cut-${markerIndex}`,
     d: outerMarkerClipCommand(x, y),
@@ -671,6 +693,7 @@ function appendSvgModules(svg, code) {
 }
 
 function appendSvgMarkers(svg, code) {
+  if (state.markersAsModules) return;
   const clips = getMarkerClips(code);
   if (clips.length) {
     const definitions = document.createElementNS(SVG_NAMESPACE, "defs");
@@ -719,6 +742,132 @@ function appendSvgLogo(svg, code) {
   svg.append(image);
 }
 
+function getAlignmentPatternPositions(version) {
+  if (version === 1) return [];
+  const count = Math.floor(version / 7) + 2;
+  const step = version === 32 ? 26 : 2 * Math.floor((version * 4 + count * 2 + 1) / (count * 2 - 2));
+  const positions = [6];
+  for (let index = count - 1, position = version * 4 + 10; index > 0; index -= 1, position -= step) {
+    positions.splice(1, 0, position);
+  }
+  return positions;
+}
+
+function getQrStructure(code, quietZone = QUIET_ZONE) {
+  const count = code.getModuleCount();
+  const version = (count - 17) / 4;
+  const dimension = count + quietZone * 2;
+  const cells = new Uint8Array(dimension * dimension);
+  const regions = QR_STRUCTURE_REGIONS.map((region) => ({ ...region, count: 0, path: "" }));
+  const types = Object.fromEntries(regions.map((region, index) => [region.id, index + 1]));
+  const at = (row, column) => (row + quietZone) * dimension + column + quietZone;
+  const mark = (row, column, type) => { cells[at(row, column)] = type; };
+
+  for (let row = 0; row < dimension; row += 1) {
+    const start = row * dimension;
+    if (row < quietZone || row >= count + quietZone) {
+      cells.fill(types.quiet, start, start + dimension);
+    } else {
+      cells.fill(types.quiet, start, start + quietZone);
+      cells.fill(types.quiet, start + quietZone + count, start + dimension);
+    }
+  }
+
+  for (const [row, column] of [[0, 0], [0, count - 7], [count - 7, 0]]) {
+    for (let dy = -1; dy <= 7; dy += 1) {
+      for (let dx = -1; dx <= 7; dx += 1) {
+        if (row + dy < 0 || column + dx < 0 || row + dy >= count || column + dx >= count) continue;
+        const finder = dy >= 0 && dy < 7 && dx >= 0 && dx < 7;
+        mark(row + dy, column + dx, finder ? types.finder : types.separators);
+      }
+    }
+  }
+
+  const positions = getAlignmentPatternPositions(version);
+  for (const row of positions) {
+    for (const column of positions) {
+      if (cells[at(row, column)]) continue;
+      for (let dy = -2; dy <= 2; dy += 1) {
+        for (let dx = -2; dx <= 2; dx += 1) mark(row + dy, column + dx, types.alignment);
+      }
+    }
+  }
+
+  for (let index = 8; index < count - 8; index += 1) {
+    if (!cells[at(6, index)]) mark(6, index, types.timing);
+    if (!cells[at(index, 6)]) mark(index, 6, types.timing);
+  }
+
+  if (version >= 7) {
+    for (let index = 0; index < 18; index += 1) {
+      mark(Math.floor(index / 3), count - 11 + index % 3, types.version);
+      mark(count - 11 + index % 3, Math.floor(index / 3), types.version);
+    }
+  }
+  for (let index = 0; index < 15; index += 1) {
+    const row = index < 6 ? index : index < 8 ? index + 1 : count - 15 + index;
+    const column = index < 8 ? count - index - 1 : index === 8 ? 7 : 14 - index;
+    mark(row, 8, types.format);
+    mark(8, column, types.format);
+  }
+
+  // Combine cells into horizontal runs so the overlay has no internal grid lines.
+  for (let row = 0; row < dimension; row += 1) {
+    for (let column = 0; column < dimension;) {
+      const type = cells[row * dimension + column];
+      let end = column + 1;
+      while (end < dimension && cells[row * dimension + end] === type) end += 1;
+      if (type) {
+        const region = regions[type - 1];
+        const length = end - column;
+        region.count += length;
+        region.path += `M${column} ${row}h${length}v1h-${length}Z`;
+      }
+      column = end;
+    }
+  }
+  return { version, dimension, cells, regions };
+}
+
+function renderQrStructureLegend(structure) {
+  elements.qrStructureLegend.replaceChildren();
+  structure.regions.forEach((region) => {
+    const item = document.createElement("li");
+    item.dataset.region = region.id;
+    item.classList.toggle("is-absent", region.count === 0);
+    const swatch = document.createElement("span");
+    swatch.className = "qr-structure-swatch";
+    swatch.style.backgroundColor = region.color;
+    swatch.setAttribute("aria-hidden", "true");
+    const name = document.createElement("span");
+    name.textContent = region.label;
+    if (region.count === 0) {
+      const status = document.createElement("small");
+      status.textContent = `Not present in V${structure.version}`;
+      name.append(" ", status);
+    }
+    item.append(swatch, name);
+    elements.qrStructureLegend.append(item);
+  });
+  elements.qrStructureLegend.hidden = false;
+}
+
+function appendSvgQrStructureGuide(svg, code) {
+  if (!state.showQrStructure) return;
+  const structure = getQrStructure(code);
+  const guide = setAttributes(document.createElementNS(SVG_NAMESPACE, "g"), {
+    class: "qr-structure-guide", "aria-hidden": "true", "shape-rendering": "crispEdges",
+  });
+  structure.regions.forEach((region) => {
+    if (!region.count) return;
+    guide.append(setAttributes(document.createElementNS(SVG_NAMESPACE, "path"), {
+      d: region.path, fill: region.color, "data-region": region.id,
+    }));
+  });
+  svg.append(guide);
+  renderQrStructureLegend(structure);
+}
+
 function appendSvgLogoGuide(svg, code) {
   if (!state.showLogoArea) return;
   const box = getLogoBox(code);
@@ -736,6 +885,8 @@ function clearPreview() {
   elements.preview.replaceChildren();
   elements.preview.removeAttribute("viewBox");
   elements.preview.removeAttribute("shape-rendering");
+  elements.qrStructureLegend.replaceChildren();
+  elements.qrStructureLegend.hidden = true;
 }
 
 function setValidation(message = "") {
@@ -751,6 +902,11 @@ function render() {
   const trimmedValue = elements.url.value.trim();
   const qrMode = getQrMode(trimmedValue, elements.prefix.value);
   const result = parseLink(trimmedValue, elements.prefix.value);
+  elements.showQrStructure.checked = state.showQrStructure;
+  elements.qrStructureLegend.hidden = true;
+  elements.markersAsModules.checked = state.markersAsModules;
+  elements.outerMarkerControls.hidden = state.markersAsModules;
+  elements.innerMarkerControls.hidden = state.markersAsModules;
   updateEncodingMode(qrMode);
   elements.outerMarkerColorValue.value = state.outerMarkerColor.toUpperCase();
   elements.cutOuterMarkerCorners.checked = state.cutOuterMarkerCorners;
@@ -801,12 +957,10 @@ function render() {
   appendSvgModules(elements.preview, state.qr);
   appendSvgMarkers(elements.preview, state.qr);
   appendSvgLogo(elements.preview, state.qr);
+  appendSvgQrStructureGuide(elements.preview, state.qr);
   appendSvgLogoGuide(elements.preview, state.qr);
   elements.preview.setAttribute("viewBox", `0 0 ${dimension} ${dimension}`);
-  elements.preview.setAttribute(
-    "shape-rendering",
-    state.moduleStyle === "square" && state.outerMarkerStyle === "square" && state.innerMarkerStyle === "square" && !hasOuterMarkerClip() ? "crispEdges" : "geometricPrecision",
-  );
+  elements.preview.setAttribute("shape-rendering", getShapeRendering());
   elements.download.disabled = false;
 }
 
@@ -971,6 +1125,16 @@ elements.errorCorrection.addEventListener("change", () => {
   });
 });
 
+elements.showQrStructure.addEventListener("change", () => {
+  state.showQrStructure = elements.showQrStructure.checked;
+  render();
+});
+
+elements.markersAsModules.addEventListener("change", () => {
+  state.markersAsModules = elements.markersAsModules.checked;
+  render();
+});
+
 elements.moduleScale.addEventListener("input", () => {
   state.moduleScale = Number(elements.moduleScale.value);
   render();
@@ -1094,7 +1258,7 @@ function buildSvg(code, size) {
   } else {
     moduleData = `<path d="${modulesToPath(code)}" fill="${state.moduleColor}"/>`;
   }
-  const markerData = markerPositions(code).map(([x, y], markerIndex) => {
+  const markerData = state.markersAsModules ? "" : markerPositions(code).map(([x, y], markerIndex) => {
     return ["outer", "inner"].map((part) => {
       const { tag, attributes } = getMarkerShape(x, y, markerIndex, part);
       const data = Object.entries(attributes).map(([name, value]) => `${name}="${value}"`).join(" ");
@@ -1105,9 +1269,7 @@ function buildSvg(code, size) {
     `<clipPath id="${id}" clipPathUnits="userSpaceOnUse"><path d="${d}"/></clipPath>`
   )).join("");
   const definitions = clipData ? `<defs>${clipData}</defs>` : "";
-  const rendering = state.moduleStyle === "square" && state.outerMarkerStyle === "square" && state.innerMarkerStyle === "square" && !hasOuterMarkerClip()
-    ? "crispEdges"
-    : "geometricPrecision";
+  const rendering = getShapeRendering();
   let logoData = "";
   if (state.logoDataUrl) {
     const box = getLogoBox(code);
@@ -1214,6 +1376,7 @@ function drawCanvasCircuit(context, geometry, moduleSize, offset) {
 }
 
 function drawCanvasMarkers(context, code, moduleSize, offset, quietZone) {
+  if (state.markersAsModules) return;
   context.fillStyle = state.innerMarkerColor;
   context.strokeStyle = state.outerMarkerColor;
   context.lineWidth = moduleSize;
