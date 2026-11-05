@@ -634,7 +634,7 @@ input[type="range"]::-moz-range-thumb {
 .toggle-switch input:checked + .toggle-track::after { background: var(--background); transform: translateX(18px); }
 .toggle-switch input:focus-visible + .toggle-track { outline: 3px solid var(--focus); outline-offset: 3px; }
 
-.qr-structure-guide { opacity: .22; pointer-events: none; }
+.qr-structure-guide { opacity: .55; pointer-events: none; }
 
 .logo-area-guide {
   fill: #D000A7;

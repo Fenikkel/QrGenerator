@@ -175,6 +175,7 @@ const QR_STRUCTURE_REGIONS = [
   { id: "version", label: "Version information", color: "#8B5CF6" },
   { id: "format", label: "Format information", color: "#3B82F6" },
   { id: "alignment", label: "Alignment patterns", color: "#D000A7" },
+  { id: "error-correction", label: "Error correction codewords", color: "#808080" },
   { id: "quiet", label: "Quiet zone", color: "#06B6D4" },
 ];
 const capacityCache = new Map();
@@ -1540,6 +1541,18 @@ function getQrStructure(code, quietZone = QUIET_ZONE) {
     const column = index < 8 ? count - index - 1 : index === 8 ? 7 : 14 - index;
     mark(row, 8, types.format);
     mark(8, column, types.format);
+  }
+
+  // The encoder interleaves all data codewords first, then correction codewords.
+  // Its map includes white bits too, and excludes function/remainder modules.
+  const layout = code.getSymbolLayout();
+  const dataCodewords = layout.blocks.reduce((total, block) => total + block.dataCount, 0);
+  for (let row = 0; row < count; row += 1) {
+    for (let column = 0; column < count; column += 1) {
+      if (layout.moduleCodewords[row * count + column] >= dataCodewords) {
+        mark(row, column, types["error-correction"]);
+      }
+    }
   }
 
   // Combine cells into horizontal runs so the overlay has no internal grid lines.
