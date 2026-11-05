@@ -25,6 +25,10 @@ const defaults = {
   clearLogoArea: false,
 };
 
+const STRESS_TEST_DEFAULTS = {
+  blur: false, contrast: false, lowLight: false, glare: false, noise: false,
+};
+
 const state = {
   ...defaults,
   editFindersIndividually: false,
@@ -54,11 +58,17 @@ const state = {
   logoAspectRatio: 1,
   logoImage: null,
   logoName: "",
+  stressTests: { ...STRESS_TEST_DEFAULTS },
 };
 
 const elements = {
   preview: document.querySelector("#qrPreview"),
   canvasArea: document.querySelector("#canvasArea"),
+  previewSurface: document.querySelector("#qrPreviewSurface"),
+  stressTests: document.querySelectorAll("[data-stress-test]"),
+  stressNoise: document.querySelector("#stressNoise"),
+  stressGlare: document.querySelector("#stressGlare"),
+  sectionResets: document.querySelectorAll("[data-reset-section]"),
   previewColumn: document.querySelector(".preview-column"),
   controlsColumn: document.querySelector(".controls-column"),
   workspace: document.querySelector(".workspace"),
@@ -147,6 +157,13 @@ const FINDER_PROPERTIES = [
   "outerMarkerColor", "innerMarkerColor", "cutOuterMarkerCorners", "outerMarkerCornersOnly",
   "outerPolygon", "innerPolygon",
 ];
+const sectionDefaults = {
+  module: structuredClone(Object.fromEntries([
+    ...Object.keys(state).filter((key) => key.startsWith("module") && key !== "moduleSeed"),
+    "individualCorners", "cornerRadii", "rotationQuarterTurns", "discreteSizes",
+  ].map((key) => [key, state[key]]))),
+  finders: structuredClone(Object.fromEntries(FINDER_PROPERTIES.map((key) => [key, state[key]]))),
+};
 const MODULE_RANGE_PROPERTIES = [
   ["moduleSides", ""], ["moduleScale", "%"],
   ["moduleCornerRadius", "%"], ["moduleRotation", "°"],
@@ -185,6 +202,7 @@ const figureTemplateCache = new Map();
 let moduleShapeCache = { key: "", cells: new Map(), variants: new Map() };
 let toastTimer;
 let logoDragDepth = 0;
+let logoLoadRevision = 0;
 let qrStructurePointerId = null;
 let previewTouch = null;
 const qrStructureKeys = new Set();
@@ -1673,6 +1691,42 @@ function clearPreview() {
   elements.preview.replaceChildren();
   elements.preview.removeAttribute("viewBox");
   elements.preview.removeAttribute("shape-rendering");
+  updateStressTestPreview();
+}
+
+function updateStressTestPreview() {
+  const tests = state.stressTests;
+  elements.stressTests.forEach((button) => button.setAttribute("aria-pressed", String(tests[button.dataset.stressTest])));
+  const filters = [];
+  if (tests.blur) filters.push("blur(1.2px)");
+  if (tests.contrast) filters.push("contrast(0.55)");
+  if (tests.lowLight) filters.push("brightness(0.6)");
+  const active = Boolean(state.qr && Object.values(tests).some(Boolean));
+  elements.previewSurface.classList.toggle("is-stressed", active);
+  elements.previewSurface.style.filter = active ? filters.join(" ") : "";
+  elements.stressNoise.hidden = !state.qr || !tests.noise;
+  elements.stressGlare.hidden = !state.qr || !tests.glare;
+}
+
+function resetSection(section) {
+  if (section === "module") {
+    Object.assign(state, structuredClone(sectionDefaults.module));
+  } else if (section === "finders") {
+    Object.assign(state, structuredClone(sectionDefaults.finders), {
+      editFindersIndividually: false, selectedFinderPattern: 0, finderPatterns: null,
+    });
+  } else if (section === "logo") {
+    clearLogo(false);
+    state.logoSize = defaults.logoSize;
+    state.showLogoArea = defaults.showLogoArea;
+    state.clearLogoArea = defaults.clearLogoArea;
+    elements.clearLogoArea.checked = state.clearLogoArea;
+  } else if (section === "stress") {
+    state.stressTests = { ...STRESS_TEST_DEFAULTS };
+    updateStressTestPreview();
+    return;
+  }
+  render();
 }
 
 function setValidation(message = "") {
@@ -1809,6 +1863,7 @@ function render() {
   appendSvgMarkers(elements.preview, state.qr);
   appendSvgLogo(elements.preview, state.qr);
   appendSvgQrStructureGuide(elements.preview, state.qr);
+  updateStressTestPreview();
   appendSvgLogoGuide(elements.preview, state.qr);
   elements.preview.setAttribute("viewBox", `0 0 ${dimension} ${dimension}`);
   elements.preview.setAttribute("shape-rendering", getShapeRendering());
@@ -1909,6 +1964,7 @@ function loadLogoImage(source) {
 
 async function handleLogoFile(file) {
   if (!file) return;
+  const revision = ++logoLoadRevision;
   setLogoError();
 
   if (!/\.svg$/i.test(file.name) && file.type !== "image/svg+xml") {
@@ -1925,6 +1981,7 @@ async function handleLogoFile(file) {
     const sanitized = sanitizeLogoSvg(await file.text());
     const dataUrl = await blobToDataUrl(new Blob([sanitized.source], { type: "image/svg+xml" }));
     const image = await loadLogoImage(dataUrl);
+    if (revision !== logoLoadRevision) return;
     state.logoDataUrl = dataUrl;
     state.logoAspectRatio = sanitized.aspectRatio;
     state.logoImage = image;
@@ -1935,11 +1992,12 @@ async function handleLogoFile(file) {
     elements.removeLogo.hidden = false;
     render();
   } catch (error) {
-    setLogoError(error.message || "The SVG could not be loaded.");
+    if (revision === logoLoadRevision) setLogoError(error.message || "The SVG could not be loaded.");
   }
 }
 
 function clearLogo(renderAfter = true) {
+  logoLoadRevision += 1;
   logoDragDepth = 0;
   state.logoDataUrl = "";
   state.logoAspectRatio = 1;
@@ -2287,6 +2345,18 @@ elements.showLogoArea.addEventListener("change", () => {
 elements.clearLogoArea.addEventListener("change", () => {
   state.clearLogoArea = elements.clearLogoArea.checked;
   render();
+});
+
+elements.stressTests.forEach((button) => {
+  button.addEventListener("click", () => {
+    const key = button.dataset.stressTest;
+    state.stressTests[key] = !state.stressTests[key];
+    updateStressTestPreview();
+  });
+});
+
+elements.sectionResets.forEach((button) => {
+  button.addEventListener("click", () => resetSection(button.dataset.resetSection));
 });
 
 function bindColorEditor(colorInput, hexInput, getValue, applyValue) {

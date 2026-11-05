@@ -118,6 +118,37 @@ select:focus-visible {
 
 .canvas-area:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 
+.qr-preview-surface { position: absolute; inset: 0; }
+.qr-preview-surface.is-stressed { background: #fff; }
+
+.stress-overlay { position: absolute; inset: 0; pointer-events: none; }
+
+.stress-noise {
+  opacity: .3;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cfilter id='noise' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.65' numOctaves='1' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Cpath fill='%23808080' filter='url(%23noise)' d='M0 0h180v180H0z'/%3E%3C/svg%3E");
+}
+
+.stress-glare {
+  background: linear-gradient(115deg, transparent 20%, rgb(255 255 255 / .65) 38%, rgb(255 255 255 / .95) 49%, rgb(255 255 255 / .65) 60%, transparent 78%);
+}
+
+.stress-test-options { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.stress-test-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--muted);
+  cursor: pointer;
+}
+.stress-test-button:hover { background: #f5f5f5; }
+.stress-test-button[aria-pressed="true"] { background: var(--text); color: var(--background); }
+.stress-test-button svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
 .qr-version-label {
   grid-column: 2;
   grid-row: 1;
@@ -149,6 +180,9 @@ select:focus-visible {
 .field { display: block; }
 
 .section-title { margin: 0 0 8px; font-size: .82rem; font-weight: 600; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.section-heading .section-title { margin: 0; }
+.shuffle-button.section-reset { margin-inline-start: auto; flex: 0 0 32px; color: var(--muted); }
 .module-style-field {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -405,8 +439,9 @@ select:focus-visible {
 .figure-control button:hover { background: #f5f5f5; }
 .figure-control button[aria-pressed="true"] { color: var(--background); background: var(--text); }
 .figure-control svg { display: block; width: 30px; height: 30px; fill: currentColor; }
-.finder-pattern-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.finder-pattern-heading { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 24px; margin-bottom: 8px; padding-inline-end: 40px; }
 .finder-pattern-heading .section-title { margin: 0; }
+.finder-pattern-heading .section-reset { position: absolute; top: 0; inset-inline-end: 0; }
 .finder-edit-controls,
 .finder-pattern-control { display: flex; align-items: center; gap: 4px; }
 .finder-edit-controls { font-size: .82rem; line-height: 1.5; }

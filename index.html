@@ -7,17 +7,21 @@
     <meta name="description" content="QR code generator with SVG and PNG export.">
     <title>QR Generator</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=20261105-12">
+    <link rel="stylesheet" href="styles.css?v=20261105-14">
     <script src="vendor/qrcode.js?v=20261105-1" defer></script>
     <script src="logo-area.js?v=20261105-1" defer></script>
-    <script src="script.js?v=20261105-19" defer></script>
+    <script src="script.js?v=20261105-23" defer></script>
   </head>
   <body>
     <main>
       <div class="workspace">
         <div class="preview-column">
           <section id="canvasArea" class="canvas-area" tabindex="0" aria-label="QR code preview. Hold to show QR structure." title="Hold to show QR structure">
-            <svg id="qrPreview" role="img" aria-label="Generated QR code"></svg>
+            <div id="qrPreviewSurface" class="qr-preview-surface">
+              <svg id="qrPreview" role="img" aria-label="Generated QR code"></svg>
+              <div id="stressNoise" class="stress-overlay stress-noise" aria-hidden="true" hidden></div>
+              <div id="stressGlare" class="stress-overlay stress-glare" aria-hidden="true" hidden></div>
+            </div>
           </section>
         </div>
 
@@ -64,7 +68,10 @@
           </section>
 
           <section class="module-section" aria-labelledby="moduleTitle">
-            <h2 id="moduleTitle" class="section-title">Module</h2>
+            <div class="section-heading">
+              <h2 id="moduleTitle" class="section-title">Module</h2>
+              <button type="button" class="shuffle-button section-reset" data-reset-section="module" aria-label="Reset Module" title="Reset Module"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/></svg></button>
+            </div>
             <div class="controls style-group">
               <label class="field module-style-field style-property" for="moduleStyle">
                 <span>Style</span>
@@ -218,6 +225,7 @@
                   <button type="button" class="shuffle-button" data-finder-pattern="2" aria-label="Bottom-left finder pattern" title="Bottom-left finder pattern" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 5 5 19M5 7v12h12"/></svg></button>
                 </div>
               </div>
+              <button type="button" class="shuffle-button section-reset" data-reset-section="finders" aria-label="Reset Finder Patterns" title="Reset Finder Patterns"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/></svg></button>
             </div>
             <div class="controls appearance-controls">
               <div class="style-controls">
@@ -280,40 +288,61 @@
             </div>
           </section>
 
-          <section class="controls logo-controls" aria-label="Logo">
-            <div class="logo-title">Logo</div>
-            <div id="logoDropZone" class="logo-upload-row" role="button" tabindex="0" aria-label="Upload SVG logo" aria-describedby="logoError">
-              <input id="logoInput" class="visually-hidden" type="file" accept=".svg,image/svg+xml">
-              <span id="logoFileName" class="logo-file-name">SVG · Max 5 MB</span>
-              <button id="removeLogo" class="remove-logo" type="button" aria-label="Remove logo" title="Remove logo" hidden>&times;</button>
+          <section class="logo-section" aria-labelledby="logoTitle">
+            <div class="section-heading">
+              <h2 id="logoTitle" class="section-title">Logo</h2>
+              <button type="button" class="shuffle-button section-reset" data-reset-section="logo" aria-label="Reset Logo" title="Reset Logo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/></svg></button>
             </div>
-            <p id="logoError" class="field-help error" role="alert" hidden></p>
+            <div class="controls logo-controls">
+              <div id="logoDropZone" class="logo-upload-row" role="button" tabindex="0" aria-label="Upload SVG logo" aria-describedby="logoError">
+                <input id="logoInput" class="visually-hidden" type="file" accept=".svg,image/svg+xml">
+                <span id="logoFileName" class="logo-file-name">SVG · Max 5 MB</span>
+                <button id="removeLogo" class="remove-logo" type="button" aria-label="Remove logo" title="Remove logo" hidden>&times;</button>
+              </div>
+              <p id="logoError" class="field-help error" role="alert" hidden></p>
 
-            <div class="logo-area-controls" role="group" aria-labelledby="logoAreaTitle">
-              <div id="logoAreaTitle" class="logo-title">Logo Area</div>
-              <label class="toggle-field" for="showLogoArea">
-                <span>Show guide</span>
-                <span class="toggle-switch">
-                  <input id="showLogoArea" type="checkbox">
-                  <span class="toggle-track" aria-hidden="true"></span>
-                </span>
-              </label>
+              <div class="logo-area-controls" role="group" aria-labelledby="logoAreaTitle">
+                <div id="logoAreaTitle" class="logo-title">Logo Area</div>
+                <label class="toggle-field" for="showLogoArea">
+                  <span>Show guide</span>
+                  <span class="toggle-switch">
+                    <input id="showLogoArea" type="checkbox">
+                    <span class="toggle-track" aria-hidden="true"></span>
+                  </span>
+                </label>
 
-              <label class="toggle-field" for="clearLogoArea">
-                <span>Clear</span>
-                <span class="toggle-switch">
-                  <input id="clearLogoArea" type="checkbox">
-                  <span class="toggle-track" aria-hidden="true"></span>
-                </span>
-              </label>
+                <label class="toggle-field" for="clearLogoArea">
+                  <span>Clear</span>
+                  <span class="toggle-switch">
+                    <input id="clearLogoArea" type="checkbox">
+                    <span class="toggle-track" aria-hidden="true"></span>
+                  </span>
+                </label>
 
-              <label class="range-field logo-size-field" for="logoSize">
-                <span>Size</span>
-                <span class="range-control">
-                  <input id="logoSize" type="range" min="10" max="30" step="1" value="20">
-                  <output id="logoSizeValue" for="logoSize">20%</output>
-                </span>
-              </label>
+                <label class="range-field logo-size-field" for="logoSize">
+                  <span>Size</span>
+                  <span class="range-control">
+                    <input id="logoSize" type="range" min="10" max="30" step="1" value="20">
+                    <output id="logoSizeValue" for="logoSize">20%</output>
+                  </span>
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="stress-test-section" aria-labelledby="stressTestTitle">
+            <div class="section-heading">
+              <h2 id="stressTestTitle" class="section-title">Stress Test</h2>
+              <button type="button" class="shuffle-button section-reset" data-reset-section="stress" aria-label="Reset Stress Test" title="Reset Stress Test"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/></svg></button>
+            </div>
+            <div class="controls stress-test-controls">
+              <div class="stress-test-options" role="group" aria-label="Stress test filters">
+                <button type="button" class="stress-test-button" data-stress-test="blur" aria-label="Blur" title="Blur" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4v16M9 6v12M13 3v18M17 6v12M21 8v8"/></svg></button>
+                <button type="button" class="stress-test-button" data-stress-test="contrast" aria-label="Low contrast" title="Low contrast" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18V3Zm0 0a9 9 0 0 1 0 18M5 8h4m-5 4h5m-4 4h4"/></svg></button>
+                <button type="button" class="stress-test-button" data-stress-test="lowLight" aria-label="Low light" title="Low light" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15A9 9 0 0 1 9 4a9 9 0 1 0 11 11Z"/></svg></button>
+                <button type="button" class="stress-test-button" data-stress-test="glare" aria-label="Glare" title="Glare" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5L12 2Z"/></svg></button>
+                <button type="button" class="stress-test-button" data-stress-test="noise" aria-label="Noise" title="Noise" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h1m5 0h1m5 0h1M7 8h1m6 0h1m5 0h1M3 12h1m6 0h1m6 0h1M6 16h1m6 0h1m6 0h1M3 20h1m6 0h1m6 0h1"/></svg></button>
+              </div>
             </div>
           </section>
 
