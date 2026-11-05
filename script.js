@@ -36,6 +36,7 @@ const state = {
   moduleSizeCount: 2,
   moduleColorCount: 1,
   moduleExtraColors: Array(3).fill(defaults.moduleColor),
+  moduleFigures: [defaults.moduleFigure],
   encodedUrl: defaults.url,
   qr: null,
   moduleSeed: crypto.getRandomValues(new Uint32Array(1))[0],
@@ -145,12 +146,14 @@ const MODULE_RANGE_PROPERTIES = [
   ["moduleCornerRadius", "%"], ["moduleRotation", "°"],
 ];
 const FIGURE_RANGE_PROPERTIES = MODULE_RANGE_PROPERTIES.filter(([key]) => ["moduleScale", "moduleRotation"].includes(key));
+const MODULE_FIGURES = ["cross", "heart", "rounded-star"];
 const MODULE_RANDOM_PROPERTIES = {
   moduleSides: { min: 3, max: 9, salt: 0x9e3779b9 },
   moduleScale: { min: 70, max: 100, salt: 0x243f6a88 },
   moduleCornerRadius: { min: 0, max: 100, salt: 0xb7e15162 },
   moduleRotation: { min: 0, max: 360, salt: 0xdeadbeef },
   moduleColor: { salt: 0xa4093822 },
+  moduleFigure: { salt: 0x082efa98 },
 };
 const moduleRandomControls = new Map(Array.from(elements.moduleRandomRanges, (group) => [group.dataset.moduleRandomRange, getRandomRangeControls(group)]));
 const individualCornerControls = createIndividualCornerControls();
@@ -477,9 +480,10 @@ function getRandomModuleProperties(style = state.moduleStyle) {
 }
 
 function hasRandomModuleProperties(style = state.moduleStyle) {
-  return getRandomModuleProperties(style).some(([key]) => state.moduleRandom[key]
-    || (key === "moduleRotation" && state.rotationQuarterTurns)
-    || (key === "moduleScale" && state.discreteSizes));
+  return (style === "figure" && state.moduleFigures.length > 1)
+    || getRandomModuleProperties(style).some(([key]) => state.moduleRandom[key]
+      || (key === "moduleRotation" && state.rotationQuarterTurns)
+      || (key === "moduleScale" && state.discreteSizes));
 }
 
 function randomModuleFraction(key, row, column, cornerIndex = null) {
@@ -506,6 +510,10 @@ function getDiscreteModuleSize(row, column) {
   return min + (max - min) * step / (state.moduleSizeCount - 1);
 }
 
+function getModuleFigureForCell(row, column) {
+  return state.moduleFigures[state.moduleFigures.length === 1 ? 0 : Math.floor(randomModuleFraction("moduleFigure", row, column) * state.moduleFigures.length)];
+}
+
 function setRandomModuleBound(key, bound, value, cornerIndex = null) {
   const limits = MODULE_RANDOM_PROPERTIES[key];
   const range = getModuleRandomRange(key, cornerIndex);
@@ -526,12 +534,14 @@ function getModuleGeometry(row, column, style = state.moduleStyle) {
 function getModuleGeometryResolver(style = state.moduleStyle) {
   const buildGeometry = style === "figure" ? getFigureGeometry : getRegularPolygonGeometry;
   if (!hasRandomModuleProperties(style)) {
-    const geometry = buildGeometry();
+    const geometry = buildGeometry(style === "figure" ? {
+      moduleFigure: state.moduleFigures[0], moduleScale: state.moduleScale, moduleRotation: state.moduleRotation,
+    } : state);
     return () => geometry;
   }
   const rangeProperties = getRandomModuleProperties(style);
   const individual = style === "regular-polygon" && state.individualCorners;
-  const key = `${style}:${style === "figure" ? state.moduleFigure : ""}:${state.moduleSeed}:` + rangeProperties.map(([property]) => (
+  const key = `${style}:${style === "figure" ? state.moduleFigures.join(",") : ""}:${state.moduleSeed}:` + rangeProperties.map(([property]) => (
     property === "moduleScale" && state.discreteSizes
       ? `size-steps:${state.moduleSizeCount}:${MODULE_RANDOM_PROPERTIES.moduleScale.min}-${MODULE_RANDOM_PROPERTIES.moduleScale.max}`
       : property === "moduleRotation" && state.rotationQuarterTurns
@@ -549,7 +559,7 @@ function getModuleGeometryResolver(style = state.moduleStyle) {
   return (row, column) => {
     const cellKey = `${row}:${column}`;
     if (cache.cells.has(cellKey)) return cache.cells.get(cellKey);
-    const properties = { moduleFigure: state.moduleFigure };
+    const properties = { moduleFigure: style === "figure" ? getModuleFigureForCell(row, column) : state.moduleFigure };
     rangeProperties.forEach(([property]) => {
       if (individual && property === "moduleCornerRadius") return;
       properties[property] = property === "moduleScale" && state.discreteSizes
@@ -563,7 +573,8 @@ function getModuleGeometryResolver(style = state.moduleStyle) {
         state.moduleRandom.moduleCornerRadius ? randomModuleValue("moduleCornerRadius", row, column, index) : state.cornerRadii[index].value
       ));
     }
-    const variantKey = rangeProperties.map(([property]) => property === "moduleCornerRadius" && individual ? properties.moduleCornerRadii.join(",") : properties[property]).join(":");
+    const variantKey = (style === "figure" ? `${properties.moduleFigure}:` : "")
+      + rangeProperties.map(([property]) => property === "moduleCornerRadius" && individual ? properties.moduleCornerRadii.join(",") : properties[property]).join(":");
     let geometry = cache.variants.get(variantKey);
     if (!geometry) {
       geometry = buildGeometry(properties);
@@ -1549,7 +1560,7 @@ function render() {
   elements.moduleMergeField.hidden = state.moduleStyle !== "regular-polygon";
   elements.figureProperties.forEach((field) => { field.hidden = state.moduleStyle !== "figure"; });
   elements.moduleFigureOptions.forEach((button) => {
-    button.setAttribute("aria-pressed", String(button.dataset.moduleFigure === state.moduleFigure));
+    button.setAttribute("aria-pressed", String(state.moduleFigures.includes(button.dataset.moduleFigure)));
   });
   elements.moduleRandomOptions.forEach((button) => {
     const key = button.dataset.moduleRandom;
@@ -1941,8 +1952,15 @@ elements.moduleFigureOptions.forEach((button) => {
   const geometry = getFigureGeometry({ moduleFigure: figure, moduleScale: 80, moduleRotation: 0 });
   button.querySelector("path").setAttribute("d", regularPolygonCommand(0, 0, geometry));
   button.addEventListener("click", () => {
-    if (state.moduleFigure === figure) return;
-    state.moduleFigure = figure;
+    const selected = new Set(state.moduleFigures);
+    if (selected.has(figure)) {
+      if (selected.size === 1) return;
+      selected.delete(figure);
+    } else {
+      selected.add(figure);
+    }
+    state.moduleFigures = MODULE_FIGURES.filter((value) => selected.has(value));
+    state.moduleFigure = state.moduleFigures[0];
     render();
   });
 });
