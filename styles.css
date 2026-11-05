@@ -326,7 +326,7 @@ select:focus-visible {
   gap: 16px;
 }
 
-.style-controls > .marker-mode-toggle { margin-top: 0; }
+.marker-part-heading { display: flex; align-items: center; gap: 4px; margin-bottom: 7px; font-size: .82rem; line-height: 1.5; font-weight: 600; }
 
 .style-property { margin-top: 16px; margin-inline-start: 16px; }
 .finder-polygon-properties { display: grid; gap: 16px; margin-top: 16px; margin-inline-start: 16px; }

@@ -7,9 +7,9 @@
     <meta name="description" content="QR code generator with SVG and PNG export.">
     <title>QR Generator</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=20261105-9">
+    <link rel="stylesheet" href="styles.css?v=20261105-11">
     <script src="vendor/qrcode.js" defer></script>
-    <script src="script.js?v=20261105-11" defer></script>
+    <script src="script.js?v=20261105-14" defer></script>
   </head>
   <body>
     <main>
@@ -220,68 +220,56 @@
             </div>
             <div class="controls appearance-controls">
               <div class="style-controls">
-                <label class="toggle-field marker-mode-toggle" for="markersAsModules">
-                  <span>Markers as modules</span>
-                  <span class="toggle-switch">
-                    <input id="markersAsModules" type="checkbox" aria-controls="outerMarkerControls innerMarkerControls">
-                    <span class="toggle-track" aria-hidden="true"></span>
-                  </span>
-                </label>
                 <div id="outerMarkerControls" class="style-group">
-                  <label class="field" for="outerMarkerStyle">
-                    <span>Outer Marker</span>
-                    <select id="outerMarkerStyle">
+                  <div class="marker-part-heading">
+                    <label for="outerMarkerStyle">Outer</label>
+                    <button id="outerAsModules" type="button" class="shuffle-button" data-finder-modules="outer" aria-label="Outer as modules" title="Outer as modules" aria-pressed="false" aria-expanded="true" aria-controls="outerMarkerProperties">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
+                    </button>
+                  </div>
+                  <div id="outerMarkerProperties">
+                    <select id="outerMarkerStyle" aria-label="Outer style">
                       <option value="regular-polygon" selected>Regular polygon</option>
+                      <option value="figure">Figures</option>
                     </select>
-                  </label>
-                  <div id="outerPolygonProperties" class="finder-polygon-properties"></div>
-                  <div class="range-field style-property">
-                    <div class="property-heading"><label for="outerColorCount">Color</label></div>
-                    <span class="range-control">
-                      <input id="outerColorCount" type="range" min="1" max="4" step="1" value="1" aria-label="Number of outer marker colors">
-                      <output id="outerColorCountValue" for="outerColorCount">1</output>
-                    </span>
-                    <div id="outerColorEditors" class="module-color-editors" role="group" aria-label="Outer marker colors">
+                    <div id="outerPolygonProperties" class="finder-polygon-properties"></div>
+                    <div class="color-field style-property">
+                      <label for="outerMarkerColor">Color</label>
                       <span class="color-input-wrap">
-                        <input id="outerMarkerColor" type="color" value="#202020" aria-label="Outer marker color 1">
-                        <input id="outerMarkerColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Outer marker hex color 1 value">
+                        <input id="outerMarkerColor" type="color" value="#202020" aria-label="Outer marker color">
+                        <input id="outerMarkerColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Outer marker hex color value">
                       </span>
                     </div>
+                    <div class="property-heading style-property" role="group" aria-labelledby="outerCutLabel">
+                      <span id="outerCutLabel">Cut</span>
+                      <button id="cutOuterMarkerCorners" type="button" class="shuffle-button" aria-label="Cut corners" title="Cut corners" aria-pressed="false">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M21 9v6M15 21H9M3 15V9"/></svg>
+                      </button>
+                      <button id="outerMarkerCornersOnly" type="button" class="shuffle-button" aria-label="Corners only" title="Corners only" aria-pressed="false">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m6 0h6v-6"/></svg>
+                      </button>
+                    </div>
                   </div>
-                  <label class="toggle-field style-property" for="cutOuterMarkerCorners">
-                    <span>Cut corners</span>
-                    <span class="toggle-switch">
-                      <input id="cutOuterMarkerCorners" type="checkbox" aria-label="Cut outer marker corners">
-                      <span class="toggle-track" aria-hidden="true"></span>
-                    </span>
-                  </label>
-                  <label class="toggle-field style-property" for="outerMarkerCornersOnly">
-                    <span>Corners only</span>
-                    <span class="toggle-switch">
-                      <input id="outerMarkerCornersOnly" type="checkbox" aria-label="Show only outer marker corners">
-                      <span class="toggle-track" aria-hidden="true"></span>
-                    </span>
-                  </label>
                 </div>
 
                 <div id="innerMarkerControls" class="style-group">
-                  <label class="field" for="innerMarkerStyle">
-                    <span>Inner Marker</span>
-                    <select id="innerMarkerStyle">
+                  <div class="marker-part-heading">
+                    <label for="innerMarkerStyle">Inner</label>
+                    <button id="innerAsModules" type="button" class="shuffle-button" data-finder-modules="inner" aria-label="Inner as modules" title="Inner as modules" aria-pressed="false" aria-expanded="true" aria-controls="innerMarkerProperties">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
+                    </button>
+                  </div>
+                  <div id="innerMarkerProperties">
+                    <select id="innerMarkerStyle" aria-label="Inner style">
                       <option value="regular-polygon" selected>Regular polygon</option>
+                      <option value="figure">Figures</option>
                     </select>
-                  </label>
-                  <div id="innerPolygonProperties" class="finder-polygon-properties"></div>
-                  <div class="range-field style-property">
-                    <div class="property-heading"><label for="innerColorCount">Color</label></div>
-                    <span class="range-control">
-                      <input id="innerColorCount" type="range" min="1" max="4" step="1" value="1" aria-label="Number of inner marker colors">
-                      <output id="innerColorCountValue" for="innerColorCount">1</output>
-                    </span>
-                    <div id="innerColorEditors" class="module-color-editors" role="group" aria-label="Inner marker colors">
+                    <div id="innerPolygonProperties" class="finder-polygon-properties"></div>
+                    <div class="color-field style-property">
+                      <label for="innerMarkerColor">Color</label>
                       <span class="color-input-wrap">
-                        <input id="innerMarkerColor" type="color" value="#202020" aria-label="Inner marker color 1">
-                        <input id="innerMarkerColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Inner marker hex color 1 value">
+                        <input id="innerMarkerColor" type="color" value="#202020" aria-label="Inner marker color">
+                        <input id="innerMarkerColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Inner marker hex color value">
                       </span>
                     </div>
                   </div>
