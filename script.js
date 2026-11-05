@@ -1444,27 +1444,29 @@ function appendSvgMarkers(svg, code) {
 }
 
 function getLogoBox(code, quietZone = QUIET_ZONE) {
-  const count = code.getModuleCount();
-  const maximum = count * (state.logoSize / 100);
-  const ratio = state.logoAspectRatio || 1;
-  const width = ratio >= 1 ? maximum : maximum * ratio;
-  const height = ratio >= 1 ? maximum / ratio : maximum;
-  return {
-    x: quietZone + (count - width) / 2,
-    y: quietZone + (count - height) / 2,
-    width,
-    height,
-  };
+  return getLogoAreaBox(code.getModuleCount(), state.logoSize, state.logoAspectRatio, quietZone);
+}
+
+function syncLogoSize(code) {
+  const maximum = code ? getLogoAreaLimit(code.getSymbolLayout(), state.logoAspectRatio) : 30;
+  const minimum = Math.min(10, maximum);
+  state.logoSize = Math.max(minimum, Math.min(maximum, Math.round(state.logoSize)));
+  elements.logoSize.min = minimum;
+  elements.logoSize.max = maximum;
+  elements.logoSize.value = state.logoSize;
+  elements.logoSize.title = `Maximum: ${maximum}%`;
+  elements.logoSize.setAttribute("aria-valuetext", `${state.logoSize}%`);
+  elements.logoSizeValue.textContent = `${state.logoSize}%`;
 }
 
 function appendSvgLogo(svg, code) {
   if (!state.logoDataUrl) return;
   const box = getLogoBox(code);
   const image = setAttributes(document.createElementNS(SVG_NAMESPACE, "image"), {
-    x: formatNumber(box.x),
-    y: formatNumber(box.y),
-    width: formatNumber(box.width),
-    height: formatNumber(box.height),
+    x: formatNumber(box.x, 6),
+    y: formatNumber(box.y, 6),
+    width: formatNumber(box.width, 6),
+    height: formatNumber(box.height, 6),
     href: state.logoDataUrl,
     preserveAspectRatio: "xMidYMid meet",
   });
@@ -1577,10 +1579,10 @@ function appendSvgLogoGuide(svg, code) {
   if (!state.showLogoArea || state.showQrStructure) return;
   const box = getLogoBox(code);
   const guide = setAttributes(document.createElementNS(SVG_NAMESPACE, "rect"), {
-    x: formatNumber(box.x),
-    y: formatNumber(box.y),
-    width: formatNumber(box.width),
-    height: formatNumber(box.height),
+    x: formatNumber(box.x, 6),
+    y: formatNumber(box.y, 6),
+    width: formatNumber(box.width, 6),
+    height: formatNumber(box.height, 6),
     class: "logo-area-guide",
   });
   svg.append(guide);
@@ -1759,11 +1761,10 @@ function render() {
     const limits = MODULE_RANDOM_PROPERTIES[key];
     syncRandomRangeControls(controls, range, limits, suffix);
   });
-  elements.logoSizeValue.textContent = `${state.logoSize}%`;
-
   if (!trimmedValue) {
     state.qr = null;
     state.encodedUrl = "";
+    syncLogoSize(null);
     setValidation();
     updateVersionInfo(null);
     clearPreview();
@@ -1777,6 +1778,7 @@ function render() {
   } catch {
     state.qr = null;
     state.encodedUrl = "";
+    syncLogoSize(null);
     setValidation("The content is too long to generate a QR code.");
     updateVersionInfo(null);
     clearPreview();
@@ -1784,6 +1786,7 @@ function render() {
     return;
   }
 
+  syncLogoSize(state.qr);
   setValidation();
   updateVersionInfo(state.qr, trimmedValue, qrMode);
   const dimension = state.qr.getModuleCount() + QUIET_ZONE * 2;
@@ -2340,7 +2343,7 @@ function buildSvg(code, size) {
   let logoData = "";
   if (state.logoDataUrl) {
     const box = getLogoBox(code);
-    logoData = `<image x="${formatNumber(box.x)}" y="${formatNumber(box.y)}" width="${formatNumber(box.width)}" height="${formatNumber(box.height)}" href="${state.logoDataUrl}" preserveAspectRatio="xMidYMid meet"/>`;
+    logoData = `<image x="${formatNumber(box.x, 6)}" y="${formatNumber(box.y, 6)}" width="${formatNumber(box.width, 6)}" height="${formatNumber(box.height, 6)}" href="${state.logoDataUrl}" preserveAspectRatio="xMidYMid meet"/>`;
   }
   return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${dimension} ${dimension}" shape-rendering="${rendering}">${definitions}${moduleData}${markerData}${logoData}</svg>\n`;
 }

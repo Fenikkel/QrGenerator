@@ -17,6 +17,65 @@
 
 var qrcode = function() {
 
+  // Local extension: cache read-only symbol metadata for logo damage limits.
+  // Encoding, mask selection, and the generated module matrix are unchanged.
+  var moduleLayoutCache = {};
+  var symbolLayoutCache = {};
+
+  var createModuleLayout = function(modules, typeNumber) {
+    var count = modules.length;
+    var functionModules = new Uint8Array(count * count);
+    var moduleCodewords = new Int32Array(count * count);
+    moduleCodewords.fill(-1);
+    for (var row = 0; row < count; row++) {
+      for (var col = 0; col < count; col++) {
+        if (modules[row][col] != null) functionModules[row * count + col] = 1;
+      }
+    }
+    var positions = QRUtil.getPatternPosition(typeNumber);
+    for (var i = 0; i < positions.length; i++) {
+      for (var j = 0; j < positions.length; j++) {
+        var y = positions[i];
+        var x = positions[j];
+        if ((y == 6 && (x == 6 || x == count - 7)) || (y == count - 7 && x == 6)) continue;
+        for (var dy = -2; dy <= 2; dy++) {
+          for (var dx = -2; dx <= 2; dx++) functionModules[(y + dy) * count + x + dx] = 2;
+        }
+      }
+    }
+    // 0 = codeword/remainder, 1 = protected function, 2 = alignment pattern.
+    return { moduleCount: count, functionModules: functionModules, moduleCodewords: moduleCodewords };
+  };
+
+  var createSymbolLayout = function(typeNumber, errorCorrectionLevel, moduleLayout) {
+    var blocks = QRRSBlock.getRSBlocks(typeNumber, errorCorrectionLevel).map(function(block) {
+      return Object.freeze({
+        totalCount: block.totalCount,
+        dataCount: block.dataCount,
+        correctionCapacity: Math.floor((block.totalCount - block.dataCount) / 2)
+      });
+    });
+    var owners = [];
+    // Follow exactly the data-then-parity interleaving used by createBytes().
+    for (var phase = 0; phase < 2; phase++) {
+      var lengths = blocks.map(function(block) { return phase == 0 ? block.dataCount : block.totalCount - block.dataCount; });
+      var maximum = Math.max.apply(null, lengths);
+      for (var index = 0; index < maximum; index++) {
+        for (var block = 0; block < blocks.length; block++) {
+          if (index < lengths[block]) owners.push(block);
+        }
+      }
+    }
+    return Object.freeze({
+      version: typeNumber,
+      moduleCount: moduleLayout.moduleCount,
+      functionModules: moduleLayout.functionModules,
+      moduleCodewords: moduleLayout.moduleCodewords,
+      codewordBlocks: new Uint16Array(owners),
+      blocks: Object.freeze(blocks)
+    });
+  };
+
   //---------------------------------------------------------------------
   // qrcode
   //---------------------------------------------------------------------
@@ -69,7 +128,9 @@ var qrcode = function() {
         _dataCache = createData(_typeNumber, _errorCorrectionLevel, _dataList);
       }
 
-      mapData(_dataCache, maskPattern);
+      var layout = !test && !moduleLayoutCache[_typeNumber] ? createModuleLayout(_modules, _typeNumber) : null;
+      mapData(_dataCache, maskPattern, layout);
+      if (layout) moduleLayoutCache[_typeNumber] = layout;
     };
 
     var setupPositionProbePattern = function(row, col) {
@@ -213,7 +274,7 @@ var qrcode = function() {
       _modules[_moduleCount - 8][8] = (!test);
     };
 
-    var mapData = function(data, maskPattern) {
+    var mapData = function(data, maskPattern, layout) {
 
       var inc = -1;
       var row = _moduleCount - 1;
@@ -230,6 +291,8 @@ var qrcode = function() {
           for (var c = 0; c < 2; c += 1) {
 
             if (_modules[row][col - c] == null) {
+
+              if (layout && byteIndex < data.length) layout.moduleCodewords[row * _moduleCount + col - c] = byteIndex;
 
               var dark = false;
 
@@ -419,6 +482,15 @@ var qrcode = function() {
 
     _this.getModuleCount = function() {
       return _moduleCount;
+    };
+
+    _this.getSymbolLayout = function() {
+      if (!_modules || !_dataCache) throw new Error('Call make() before requesting symbol metadata.');
+      var key = _typeNumber + ':' + _errorCorrectionLevel;
+      if (!symbolLayoutCache[key]) {
+        symbolLayoutCache[key] = createSymbolLayout(_typeNumber, _errorCorrectionLevel, moduleLayoutCache[_typeNumber]);
+      }
+      return symbolLayoutCache[key];
     };
 
     _this.make = function() {

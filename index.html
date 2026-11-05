@@ -8,8 +8,9 @@
     <title>QR Generator</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles.css?v=20261105-11">
-    <script src="vendor/qrcode.js" defer></script>
-    <script src="script.js?v=20261105-14" defer></script>
+    <script src="vendor/qrcode.js?v=20261105-1" defer></script>
+    <script src="logo-area.js?v=20261105-1" defer></script>
+    <script src="script.js?v=20261105-18" defer></script>
   </head>
   <body>
     <main>
@@ -309,7 +310,7 @@
               <label class="range-field logo-size-field" for="logoSize">
                 <span>Size</span>
                 <span class="range-control">
-                  <input id="logoSize" type="range" min="10" max="30" value="20">
+                  <input id="logoSize" type="range" min="10" max="30" step="1" value="20">
                   <output id="logoSizeValue" for="logoSize">20%</output>
                 </span>
               </label>
