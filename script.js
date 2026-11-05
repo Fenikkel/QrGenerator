@@ -26,6 +26,16 @@ const defaults = {
 
 const state = {
   ...defaults,
+  editFindersIndividually: false,
+  selectedFinderPattern: 0,
+  finderPatterns: null,
+  individualCorners: false,
+  cornerRadii: null,
+  rotationQuarterTurns: false,
+  discreteSizes: false,
+  moduleSizeCount: 2,
+  moduleColorCount: 1,
+  moduleExtraColors: Array(3).fill(defaults.moduleColor),
   encodedUrl: defaults.url,
   qr: null,
   moduleSeed: crypto.getRandomValues(new Uint32Array(1))[0],
@@ -75,11 +85,17 @@ const elements = {
   moduleSidesValue: document.querySelector("#moduleSidesValue"),
   moduleCornerRadius: document.querySelector("#moduleCornerRadius"),
   moduleCornerRadiusValue: document.querySelector("#moduleCornerRadiusValue"),
+  individualCornersToggle: document.querySelector("#individualCornersToggle"),
+  individualCornerControls: document.querySelector("#individualCornerControls"),
   moduleRotation: document.querySelector("#moduleRotation"),
   moduleRotationValue: document.querySelector("#moduleRotationValue"),
+  rotationQuarterTurnsToggle: document.querySelector("#rotationQuarterTurnsToggle"),
   moduleMergeOptions: document.querySelectorAll("[data-module-merge]"),
   moduleMergeField: document.querySelector(".module-merge-field"),
   markersAsModules: document.querySelector("#markersAsModules"),
+  editAllFinderPatterns: document.querySelector("#editAllFinderPatterns"),
+  finderPatternSelector: document.querySelector("#finderPatternSelector"),
+  finderPatternOptions: document.querySelectorAll("[data-finder-pattern]"),
   outerMarkerControls: document.querySelector("#outerMarkerControls"),
   innerMarkerControls: document.querySelector("#innerMarkerControls"),
   outerMarkerStyle: document.querySelector("#outerMarkerStyle"),
@@ -89,12 +105,19 @@ const elements = {
   moduleScaleField: document.querySelector(".module-size-field"),
   moduleScale: document.querySelector("#moduleScale"),
   moduleScaleValue: document.querySelector("#moduleScaleValue"),
+  discreteSizesToggle: document.querySelector("#discreteSizesToggle"),
+  moduleSizeCountControl: document.querySelector("#moduleSizeCountControl"),
+  moduleSizeCount: document.querySelector("#moduleSizeCount"),
+  moduleSizeCountValue: document.querySelector("#moduleSizeCountValue"),
   outerMarkerColor: document.querySelector("#outerMarkerColor"),
   outerMarkerColorValue: document.querySelector("#outerMarkerColorValue"),
   innerMarkerColor: document.querySelector("#innerMarkerColor"),
   innerMarkerColorValue: document.querySelector("#innerMarkerColorValue"),
   moduleColor: document.querySelector("#moduleColor"),
   moduleColorValue: document.querySelector("#moduleColorValue"),
+  moduleColorCount: document.querySelector("#moduleColorCount"),
+  moduleColorCountValue: document.querySelector("#moduleColorCountValue"),
+  moduleColorEditors: document.querySelector("#moduleColorEditors"),
   logoInput: document.querySelector("#logoInput"),
   logoDropZone: document.querySelector("#logoDropZone"),
   logoFileName: document.querySelector("#logoFileName"),
@@ -112,6 +135,11 @@ const elements = {
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const QUIET_ZONE = 4;
+const MODULE_PALETTE_CLIP_ID = "module-palette-clip";
+const FINDER_PROPERTIES = [
+  "markersAsModules", "outerMarkerStyle", "innerMarkerStyle",
+  "outerMarkerColor", "innerMarkerColor", "cutOuterMarkerCorners", "outerMarkerCornersOnly",
+];
 const MODULE_RANGE_PROPERTIES = [
   ["moduleSides", ""], ["moduleScale", "%"],
   ["moduleCornerRadius", "%"], ["moduleRotation", "°"],
@@ -122,18 +150,11 @@ const MODULE_RANDOM_PROPERTIES = {
   moduleScale: { min: 70, max: 100, salt: 0x243f6a88 },
   moduleCornerRadius: { min: 0, max: 100, salt: 0xb7e15162 },
   moduleRotation: { min: 0, max: 360, salt: 0xdeadbeef },
+  moduleColor: { salt: 0xa4093822 },
 };
-const moduleRandomControls = new Map(Array.from(elements.moduleRandomRanges, (group) => [
-  group.dataset.moduleRandomRange,
-  {
-    group,
-    track: group.querySelector(".random-range-track"),
-    min: group.querySelector('[data-bound="min"]'),
-    max: group.querySelector('[data-bound="max"]'),
-    minValue: group.querySelector('[data-bound-value="min"]'),
-    maxValue: group.querySelector('[data-bound-value="max"]'),
-  },
-]));
+const moduleRandomControls = new Map(Array.from(elements.moduleRandomRanges, (group) => [group.dataset.moduleRandomRange, getRandomRangeControls(group)]));
+const individualCornerControls = createIndividualCornerControls();
+const moduleColorControls = createModuleColorControls();
 const QR_STRUCTURE_REGIONS = [
   { id: "finder", label: "Finder patterns", color: "#EF4444" },
   { id: "separators", label: "Separators", color: "#10B981" },
@@ -309,6 +330,142 @@ function circleCommand(centerX, centerY, radius) {
   return `M${right} ${center}a${r} ${r} 0 0 1 -${r} ${r}a${r} ${r} 0 0 1 -${r} -${r}a${r} ${r} 0 0 1 ${r} -${r}a${r} ${r} 0 0 1 ${r} ${r}Z`;
 }
 
+function createModuleColorControls() {
+  return Array.from({ length: 4 }, (_, index) => {
+    const group = index === 0 ? elements.moduleColor.closest(".color-input-wrap") : elements.moduleColor.closest(".color-input-wrap").cloneNode(true);
+    const input = group.querySelector('input[type="color"]');
+    const hexInput = group.querySelector(".hex-input");
+    if (index > 0) {
+      input.id = `moduleColor${index + 1}`;
+      hexInput.id = `moduleColor${index + 1}Value`;
+      input.setAttribute("aria-label", `Module color ${index + 1}`);
+      hexInput.setAttribute("aria-label", `Module hex color ${index + 1} value`);
+      group.hidden = true;
+      elements.moduleColorEditors.append(group);
+    }
+    return { group, input, hexInput };
+  });
+}
+
+function getModuleColor(index = 0) {
+  return index === 0 ? state.moduleColor : state.moduleExtraColors[index - 1];
+}
+
+function getModuleColorForCell(row, column) {
+  return getModuleColor(state.moduleColorCount === 1 ? 0 : Math.floor(randomModuleFraction("moduleColor", row, column) * state.moduleColorCount));
+}
+
+function getModulePalettePaint(code, quietZone = QUIET_ZONE) {
+  const palette = Array.from({ length: state.moduleColorCount }, (_, index) => getModuleColor(index));
+  if (new Set(palette).size === 1) return null;
+  const count = code.getModuleCount();
+  const groups = new Map();
+  for (let row = 0; row < count; row += 1) {
+    for (let column = 0; column < count; column += 1) {
+      if (!code.isDark(row, column)) continue;
+      const color = getModuleColorForCell(row, column);
+      if (color === state.moduleColor) continue;
+      if (!groups.has(color)) groups.set(color, { color, commands: [], cells: [] });
+      const group = groups.get(color);
+      group.commands.push(`M${column + quietZone} ${row + quietZone}h1v1h-1z`);
+      group.cells.push([row, column]);
+    }
+  }
+  return {
+    clipData: modulesToPath(code, quietZone),
+    dimension: count + quietZone * 2,
+    groups: Array.from(groups.values(), ({ color, commands, cells }) => ({ color, d: commands.join(""), cells })),
+  };
+}
+
+function getRandomRangeControls(group) {
+  return {
+    group,
+    track: group.querySelector(".random-range-track"),
+    min: group.querySelector('[data-bound="min"]'),
+    max: group.querySelector('[data-bound="max"]'),
+    minValue: group.querySelector('[data-bound-value="min"]'),
+    maxValue: group.querySelector('[data-bound-value="max"]'),
+  };
+}
+
+function createIndividualCornerControls() {
+  return Array.from({ length: 9 }, (_, index) => {
+    const id = `moduleCorner${index + 1}`;
+    const field = document.createElement("div");
+    field.className = "individual-corner-field";
+    field.hidden = true;
+    const label = document.createElement("label");
+    label.htmlFor = id;
+    label.textContent = `c${index + 1}`;
+    const manual = elements.moduleCornerRadius.closest(".range-control").cloneNode(true);
+    manual.id = `${id}Control`;
+    const input = manual.querySelector("input");
+    input.id = id;
+    input.disabled = true;
+    input.setAttribute("aria-label", `Module corner ${index + 1} radius`);
+    const output = manual.querySelector("output");
+    output.id = `${id}Value`;
+    output.setAttribute("for", id);
+    const randomGroup = moduleRandomControls.get("moduleCornerRadius").group.cloneNode(true);
+    randomGroup.id = `${id}RandomControl`;
+    randomGroup.removeAttribute("data-module-random-range");
+    randomGroup.setAttribute("aria-label", `Random radius for corner ${index + 1}`);
+    const random = getRandomRangeControls(randomGroup);
+    for (const bound of ["min", "max"]) {
+      random[bound].id = `${id}${bound === "min" ? "Min" : "Max"}`;
+      random[bound].disabled = true;
+      random[bound].setAttribute("aria-label", `${bound === "min" ? "Minimum" : "Maximum"} random radius for corner ${index + 1}`);
+      random[`${bound}Value`].setAttribute("for", random[bound].id);
+    }
+    field.append(label, manual, randomGroup);
+    elements.individualCornerControls.append(field);
+    return { field, label, manual, input, output, random };
+  });
+}
+
+function syncRandomRangeControls(controls, range, limits, suffix) {
+  for (const bound of ["min", "max"]) {
+    controls[bound].value = range[bound];
+    controls[`${bound}Value`].textContent = `${range[bound]}${suffix}`;
+    controls[bound].setAttribute("aria-valuetext", `${range[bound]}${suffix}`);
+    const position = (range[bound] - limits.min) / (limits.max - limits.min) * 100;
+    controls.group.style.setProperty(`--range-${bound}`, `${position}%`);
+  }
+  controls.min.setAttribute("aria-valuemax", range.max);
+  controls.max.setAttribute("aria-valuemin", range.min);
+}
+
+function getVisibleCornerCount() {
+  return state.moduleRandom.moduleSides ? state.moduleRandomRanges.moduleSides.max : state.moduleSides;
+}
+
+function syncIndividualCornerControls() {
+  const enabled = state.moduleStyle === "regular-polygon" && state.individualCorners;
+  const count = getVisibleCornerCount();
+  const random = state.moduleRandom.moduleCornerRadius;
+  elements.individualCornersToggle.setAttribute("aria-pressed", String(state.individualCorners));
+  elements.individualCornerControls.hidden = !enabled;
+  individualCornerControls.forEach((controls, index) => {
+    const visible = enabled && index < count;
+    const corner = state.cornerRadii?.[index] || { value: state.moduleCornerRadius, ...state.moduleRandomRanges.moduleCornerRadius };
+    controls.field.hidden = !visible;
+    controls.manual.hidden = random;
+    controls.input.disabled = !visible || random;
+    controls.input.value = corner.value;
+    controls.output.textContent = `${corner.value}%`;
+    controls.random.group.hidden = !random;
+    controls.random.min.disabled = !visible || !random;
+    controls.random.max.disabled = !visible || !random;
+    controls.label.htmlFor = random ? controls.random.min.id : controls.input.id;
+    syncRandomRangeControls(controls.random, corner, MODULE_RANDOM_PROPERTIES.moduleCornerRadius, "%");
+  });
+}
+
+function getModuleRandomRange(key, cornerIndex = null) {
+  return cornerIndex === null ? state.moduleRandomRanges[key] : state.cornerRadii[cornerIndex];
+}
+
 function getModuleScale() {
   return state.moduleScale / 100;
 }
@@ -320,57 +477,101 @@ function getRandomModuleProperties(style = state.moduleStyle) {
 }
 
 function hasRandomModuleProperties(style = state.moduleStyle) {
-  return getRandomModuleProperties(style).some(([key]) => state.moduleRandom[key]);
+  return getRandomModuleProperties(style).some(([key]) => state.moduleRandom[key]
+    || (key === "moduleRotation" && state.rotationQuarterTurns)
+    || (key === "moduleScale" && state.discreteSizes));
 }
 
-function randomModuleValue(key, row, column) {
-  const { salt } = MODULE_RANDOM_PROPERTIES[key];
-  const { min, max } = state.moduleRandomRanges[key];
+function randomModuleFraction(key, row, column, cornerIndex = null) {
+  const salt = MODULE_RANDOM_PROPERTIES[key].salt ^ (cornerIndex === null ? 0 : Math.imul(cornerIndex + 1, 0x9e3779b1));
   let hash = state.moduleSeed ^ salt ^ Math.imul(row + 1, 0x85ebca6b) ^ Math.imul(column + 1, 0xc2b2ae35);
   hash = Math.imul(hash ^ (hash >>> 16), 0x7feb352d);
   hash = Math.imul(hash ^ (hash >>> 15), 0x846ca68b);
   hash = (hash ^ (hash >>> 16)) >>> 0;
-  return min + Math.floor(hash / 0x100000000 * (max - min + 1));
+  return hash / 0x100000000;
 }
 
-function setRandomModuleBound(key, bound, value) {
+function randomModuleValue(key, row, column, cornerIndex = null) {
+  const { min, max } = getModuleRandomRange(key, cornerIndex);
+  return min + Math.floor(randomModuleFraction(key, row, column, cornerIndex) * (max - min + 1));
+}
+
+function getQuarterTurnRotation(row, column) {
+  return (state.moduleRotation + Math.floor(randomModuleFraction("moduleRotation", row, column) * 4) * 90) % 360;
+}
+
+function getDiscreteModuleSize(row, column) {
+  const { min, max } = MODULE_RANDOM_PROPERTIES.moduleScale;
+  const step = Math.floor(randomModuleFraction("moduleScale", row, column) * state.moduleSizeCount);
+  return min + (max - min) * step / (state.moduleSizeCount - 1);
+}
+
+function setRandomModuleBound(key, bound, value, cornerIndex = null) {
   const limits = MODULE_RANDOM_PROPERTIES[key];
-  const range = state.moduleRandomRanges[key];
+  const range = getModuleRandomRange(key, cornerIndex);
   const minimum = bound === "min" ? limits.min : range.min;
   const maximum = bound === "max" ? limits.max : range.max;
   const next = Math.max(minimum, Math.min(maximum, Math.round(value)));
-  moduleRandomControls.get(key)[bound].value = next;
+  const controls = cornerIndex === null ? moduleRandomControls.get(key) : individualCornerControls[cornerIndex].random;
+  controls[bound].value = next;
   if (range[bound] === next) return;
   range[bound] = next;
   render();
 }
 
 function getModuleGeometry(row, column, style = state.moduleStyle) {
+  return getModuleGeometryResolver(style)(row, column);
+}
+
+function getModuleGeometryResolver(style = state.moduleStyle) {
   const buildGeometry = style === "figure" ? getFigureGeometry : getRegularPolygonGeometry;
-  if (!hasRandomModuleProperties(style)) return buildGeometry();
+  if (!hasRandomModuleProperties(style)) {
+    const geometry = buildGeometry();
+    return () => geometry;
+  }
   const rangeProperties = getRandomModuleProperties(style);
+  const individual = style === "regular-polygon" && state.individualCorners;
   const key = `${style}:${style === "figure" ? state.moduleFigure : ""}:${state.moduleSeed}:` + rangeProperties.map(([property]) => (
-    state.moduleRandom[property]
+    property === "moduleScale" && state.discreteSizes
+      ? `size-steps:${state.moduleSizeCount}:${MODULE_RANDOM_PROPERTIES.moduleScale.min}-${MODULE_RANDOM_PROPERTIES.moduleScale.max}`
+      : property === "moduleRotation" && state.rotationQuarterTurns
+      ? `quarter-turns:${state.moduleRotation % 360}`
+      : property === "moduleCornerRadius" && individual
+      ? `corners:${state.cornerRadii.slice(0, getVisibleCornerCount()).map((corner) => state.moduleRandom.moduleCornerRadius ? `${corner.min}-${corner.max}` : corner.value).join(",")}`
+      : state.moduleRandom[property]
       ? `random:${state.moduleRandomRanges[property].min}-${state.moduleRandomRanges[property].max}`
       : state[property]
   )).join(":");
   if (moduleShapeCache.key !== key) {
     moduleShapeCache = { key, cells: new Map(), variants: new Map() };
   }
-  const cellKey = `${row}:${column}`;
-  if (moduleShapeCache.cells.has(cellKey)) return moduleShapeCache.cells.get(cellKey);
-  const properties = { moduleFigure: state.moduleFigure };
-  rangeProperties.forEach(([property]) => {
-    properties[property] = state.moduleRandom[property] ? randomModuleValue(property, row, column) : state[property];
-  });
-  const variantKey = rangeProperties.map(([property]) => properties[property]).join(":");
-  let geometry = moduleShapeCache.variants.get(variantKey);
-  if (!geometry) {
-    geometry = buildGeometry(properties);
-    moduleShapeCache.variants.set(variantKey, geometry);
-  }
-  moduleShapeCache.cells.set(cellKey, geometry);
-  return geometry;
+  const cache = moduleShapeCache;
+  return (row, column) => {
+    const cellKey = `${row}:${column}`;
+    if (cache.cells.has(cellKey)) return cache.cells.get(cellKey);
+    const properties = { moduleFigure: state.moduleFigure };
+    rangeProperties.forEach(([property]) => {
+      if (individual && property === "moduleCornerRadius") return;
+      properties[property] = property === "moduleScale" && state.discreteSizes
+        ? getDiscreteModuleSize(row, column)
+        : property === "moduleRotation" && state.rotationQuarterTurns
+        ? getQuarterTurnRotation(row, column)
+        : (state.moduleRandom[property] ? randomModuleValue(property, row, column) : state[property]);
+    });
+    if (individual) {
+      properties.moduleCornerRadii = Array.from({ length: properties.moduleSides }, (_, index) => (
+        state.moduleRandom.moduleCornerRadius ? randomModuleValue("moduleCornerRadius", row, column, index) : state.cornerRadii[index].value
+      ));
+    }
+    const variantKey = rangeProperties.map(([property]) => property === "moduleCornerRadius" && individual ? properties.moduleCornerRadii.join(",") : properties[property]).join(":");
+    let geometry = cache.variants.get(variantKey);
+    if (!geometry) {
+      geometry = buildGeometry(properties);
+      cache.variants.set(variantKey, geometry);
+    }
+    cache.cells.set(cellKey, geometry);
+    return geometry;
+  };
 }
 
 function polygonBridgeGeometry(vertices) {
@@ -389,16 +590,19 @@ function polygonBridgeGeometry(vertices) {
 
 function getRegularPolygonGeometry(properties = state) {
   const sides = properties.moduleSides;
-  const rounding = properties.moduleCornerRadius / 100;
+  const cornerValues = properties.moduleCornerRadii || (properties === state && state.individualCorners
+    ? state.cornerRadii.slice(0, sides).map((corner) => corner.value) : null);
+  const rounding = (cornerValues ? cornerValues[0] : properties.moduleCornerRadius) / 100;
+  const uniform = !cornerValues || cornerValues.every((value) => value === cornerValues[0]);
   const rotation = properties.moduleRotation % 360;
   const size = properties.moduleScale / 100;
-  const key = `${rounding === 1 ? "circle" : `${sides}:${rounding}:${rotation}`}:${size}`;
+  const key = `${uniform && rounding === 1 ? "circle" : `${sides}:${uniform ? rounding : cornerValues.join(",")}:${rotation}`}:${size}`;
   if (regularPolygonCache?.key === key) return regularPolygonCache.geometry;
 
   const turn = Math.PI * 2;
   let start;
   const segments = [];
-  if (rounding === 1) {
+  if (uniform && rounding === 1) {
     start = [1, 0];
     for (let i = 0; i < 4; i += 1) {
       const startAngle = i * Math.PI / 2;
@@ -411,14 +615,16 @@ function getRegularPolygonGeometry(properties = state) {
       const angle = initialAngle + i * turn / sides;
       return [Math.cos(angle), Math.sin(angle)];
     });
-    if (rounding === 0) {
+    if (uniform && rounding === 0) {
       [start] = vertices;
       vertices.slice(1).forEach((end) => segments.push({ type: "line", end }));
     } else {
-      const radius = rounding * Math.cos(Math.PI / sides);
       const corners = vertices.map(([x, y], i) => {
+        const cornerRounding = cornerValues ? cornerValues[i] / 100 : rounding;
+        if (cornerRounding === 0) return { type: "line", incoming: [x, y], end: [x, y] };
+        const radius = cornerRounding * Math.cos(Math.PI / sides);
         // Moving each fillet center inward by t gives tangencies at t * side / 2.
-        const center = [x * (1 - rounding), y * (1 - rounding)];
+        const center = [x * (1 - cornerRounding), y * (1 - cornerRounding)];
         const angle = initialAngle + i * turn / sides;
         const startAngle = angle - Math.PI / sides;
         const endAngle = angle + Math.PI / sides;
@@ -431,7 +637,7 @@ function getRegularPolygonGeometry(properties = state) {
       start = corners[0].incoming;
       corners.forEach((corner, i) => {
         if (i > 0) segments.push({ type: "line", end: corner.incoming });
-        segments.push(corner);
+        if (corner.type === "arc") segments.push(corner);
       });
     }
   }
@@ -499,13 +705,15 @@ function regularPolygonMergedPath(code, quietZone) {
   const geometries = new Array(count * count);
   const commands = [];
   const exclusionBox = state.clearLogoArea ? getLogoBox(code, quietZone) : null;
+  const resolveGeometry = getModuleGeometryResolver("regular-polygon");
   const squareGroups = state.moduleMerge === "square-groups";
   const horizontal = squareGroups || state.moduleMerge === "all" || state.moduleMerge === "horizontal";
   const vertical = squareGroups || state.moduleMerge === "all" || state.moduleMerge === "vertical";
   for (let row = 0; row < count; row += 1) {
     for (let column = 0; column < count; column += 1) {
-      if (!shouldRenderModule(code, row, column, quietZone, exclusionBox, "regular-polygon")) continue;
-      const geometry = getModuleGeometry(row, column, "regular-polygon");
+      if (!shouldRenderModule(code, row, column, quietZone, null, "regular-polygon")) continue;
+      const geometry = resolveGeometry(row, column);
+      if (moduleIntersectsBox(row, column, quietZone, exclusionBox, "regular-polygon", geometry)) continue;
       geometries[row * count + column] = geometry;
       commands.push(regularPolygonCommand(column + quietZone, row + quietZone, geometry));
     }
@@ -761,12 +969,23 @@ function moduleCommand(x, y, style) {
   return `M${x} ${y}h1v1h-1z`;
 }
 
+function getFinderSettings(markerIndex = state.selectedFinderPattern) {
+  return state.editFindersIndividually && state.finderPatterns ? state.finderPatterns[markerIndex] : state;
+}
+
+function getAppearanceSettings(key) {
+  return FINDER_PROPERTIES.includes(key) ? getFinderSettings() : state;
+}
+
+function getFinderPatternIndex(row, column, count) {
+  if (row < 7 && column < 7) return 0;
+  if (row < 7 && column >= count - 7) return 1;
+  if (row >= count - 7 && column < 7) return 2;
+  return -1;
+}
+
 function isMarkerModule(row, column, count) {
-  const inTop = row < 7;
-  const inLeft = column < 7;
-  const inRight = column >= count - 7;
-  const inBottom = row >= count - 7;
-  return (inTop && (inLeft || inRight)) || (inBottom && inLeft);
+  return getFinderPatternIndex(row, column, count) >= 0;
 }
 
 function isCircuitStyle(style = state.moduleStyle) {
@@ -777,10 +996,10 @@ function getCircuitWidth() {
   return getModuleScale();
 }
 
-function moduleIntersectsBox(row, column, quietZone, box, style = state.moduleStyle) {
+function moduleIntersectsBox(row, column, quietZone, box, style = state.moduleStyle, geometry = null) {
   if (!box) return false;
   if (["regular-polygon", "figure"].includes(style)) {
-    const bounds = getModuleGeometry(row, column, style).bounds;
+    const bounds = (geometry || getModuleGeometry(row, column, style)).bounds;
     return rectangleIntersectsBox(column + quietZone + bounds.x, row + quietZone + bounds.y, bounds.width, bounds.height, box);
   }
   const size = isCircuitStyle(style) ? getCircuitWidth() : getModuleScale();
@@ -801,8 +1020,9 @@ function rectangleIntersectsBox(left, top, width, height, box) {
 function shouldRenderModule(code, row, column, quietZone, exclusionBox, style = state.moduleStyle) {
   const count = code.getModuleCount();
   if (row < 0 || column < 0 || row >= count || column >= count) return false;
+  const markerIndex = getFinderPatternIndex(row, column, count);
   return code.isDark(row, column)
-    && (state.markersAsModules || !isMarkerModule(row, column, count))
+    && (markerIndex < 0 || getFinderSettings(markerIndex).markersAsModules)
     && !moduleIntersectsBox(row, column, quietZone, exclusionBox, style);
 }
 
@@ -871,14 +1091,17 @@ function modulesToPath(code, quietZone = QUIET_ZONE, style = state.moduleStyle) 
   const count = code.getModuleCount();
   const commands = [];
   const exclusionBox = state.clearLogoArea ? getLogoBox(code, quietZone) : null;
+  const resolveGeometry = style === "figure" ? getModuleGeometryResolver(style) : null;
 
   for (let row = 0; row < count; row += 1) {
     for (let column = 0; column < count; column += 1) {
-      if (!shouldRenderModule(code, row, column, quietZone, exclusionBox, style)) continue;
+      if (!shouldRenderModule(code, row, column, quietZone, resolveGeometry ? null : exclusionBox, style)) continue;
+      const geometry = resolveGeometry ? resolveGeometry(row, column) : null;
+      if (geometry && moduleIntersectsBox(row, column, quietZone, exclusionBox, style, geometry)) continue;
       const x = column + quietZone;
       const y = row + quietZone;
       commands.push(style === "figure"
-        ? regularPolygonCommand(x, y, getModuleGeometry(row, column, style))
+        ? regularPolygonCommand(x, y, geometry)
         : moduleCommand(x, y, style));
     }
   }
@@ -913,17 +1136,20 @@ function oppositeCornersRectCommand(x, y, size, radius, reverse) {
   return `M${point(radius, 0)}L${point(size, 0)}L${point(size, size - radius)}Q${point(size, size)} ${point(size - radius, size)}L${point(0, size)}L${point(0, radius)}Q${point(0, 0)} ${point(radius, 0)}Z`;
 }
 
-function hasOuterMarkerClip() {
-  return state.cutOuterMarkerCorners || state.outerMarkerCornersOnly;
+function hasOuterMarkerClip(markerIndex = state.selectedFinderPattern) {
+  const settings = getFinderSettings(markerIndex);
+  return settings.cutOuterMarkerCorners || settings.outerMarkerCornersOnly;
 }
 
 function getShapeRendering() {
-  const squareMarkers = state.markersAsModules
-    || (state.outerMarkerStyle === "square" && state.innerMarkerStyle === "square" && !hasOuterMarkerClip());
+  const squareMarkers = [0, 1, 2].every((markerIndex) => {
+    const settings = getFinderSettings(markerIndex);
+    return settings.markersAsModules || (settings.outerMarkerStyle === "square" && settings.innerMarkerStyle === "square" && !hasOuterMarkerClip(markerIndex));
+  });
   return state.moduleStyle === "square" && squareMarkers ? "crispEdges" : "geometricPrecision";
 }
 
-function outerMarkerClipCommand(x, y, scale = 1) {
+function outerMarkerClipCommand(x, y, scale = 1, markerIndex = state.selectedFinderPattern) {
   const third = 7 * scale / 3;
   const nearX = formatNumber(x + third, 4);
   const farX = formatNumber(x + 2 * third, 4);
@@ -933,7 +1159,7 @@ function outerMarkerClipCommand(x, y, scale = 1) {
   const right = formatNumber(x + 7 * scale, 4);
   const top = formatNumber(y, 4);
   const bottom = formatNumber(y + 7 * scale, 4);
-  if (state.outerMarkerCornersOnly) {
+  if (getFinderSettings(markerIndex).outerMarkerCornersOnly) {
     return `M${left} ${top}H${nearX}V${nearY}H${left}Z`
       + `M${farX} ${top}H${right}V${nearY}H${farX}Z`
       + `M${left} ${farY}H${nearX}V${bottom}H${left}Z`
@@ -943,24 +1169,26 @@ function outerMarkerClipCommand(x, y, scale = 1) {
 }
 
 function getMarkerClips(code) {
-  if (state.markersAsModules || !hasOuterMarkerClip()) return [];
-  return markerPositions(code).map(([x, y], markerIndex) => ({
-    id: `outer-marker-cut-${markerIndex}`,
-    d: outerMarkerClipCommand(x, y),
-  }));
+  return markerPositions(code).flatMap(([x, y], markerIndex) => (
+    getFinderSettings(markerIndex).markersAsModules || !hasOuterMarkerClip(markerIndex) ? [] : [{
+      id: `outer-marker-cut-${markerIndex}`,
+      d: outerMarkerClipCommand(x, y, 1, markerIndex),
+    }]
+  ));
 }
 
 function getMarkerShape(x, y, markerIndex, part, scale = 1) {
   const outer = part === "outer";
-  const style = state[`${part}MarkerStyle`];
-  const color = state[`${part}MarkerColor`];
+  const settings = getFinderSettings(markerIndex);
+  const style = settings[`${part}MarkerStyle`];
+  const color = settings[`${part}MarkerColor`];
   const inset = (outer ? .5 : 2) * scale;
   const size = (outer ? 6 : 3) * scale;
   const radius = (outer ? 1.25 : .8) * scale;
   const attributes = outer
     ? {
       fill: "none", stroke: color, "stroke-width": scale,
-      ...(hasOuterMarkerClip() ? { "clip-path": `url(#outer-marker-cut-${markerIndex})` } : {}),
+      ...(hasOuterMarkerClip(markerIndex) ? { "clip-path": `url(#outer-marker-cut-${markerIndex})` } : {}),
     }
     : { fill: color };
 
@@ -992,6 +1220,18 @@ function setAttributes(node, attributes) {
 }
 
 function appendSvgModules(svg, code) {
+  const palette = getModulePalettePaint(code);
+  if (palette) {
+    const definitions = document.createElementNS(SVG_NAMESPACE, "defs");
+    const clip = setAttributes(document.createElementNS(SVG_NAMESPACE, "clipPath"), { id: MODULE_PALETTE_CLIP_ID, clipPathUnits: "userSpaceOnUse" });
+    clip.append(setAttributes(document.createElementNS(SVG_NAMESPACE, "path"), { d: palette.clipData }));
+    definitions.append(clip);
+    const layer = setAttributes(document.createElementNS(SVG_NAMESPACE, "g"), { "clip-path": `url(#${MODULE_PALETTE_CLIP_ID})`, "shape-rendering": "crispEdges" });
+    layer.append(setAttributes(document.createElementNS(SVG_NAMESPACE, "rect"), { width: palette.dimension, height: palette.dimension, fill: state.moduleColor }));
+    palette.groups.forEach(({ d, color }) => layer.append(setAttributes(document.createElementNS(SVG_NAMESPACE, "path"), { d, fill: color })));
+    svg.append(definitions, layer);
+    return;
+  }
   if (isCircuitStyle()) {
     const geometry = getCircuitGeometry(code);
     const trackData = circuitTrackPath(geometry);
@@ -1023,7 +1263,6 @@ function appendSvgModules(svg, code) {
 }
 
 function appendSvgMarkers(svg, code) {
-  if (state.markersAsModules) return;
   const clips = getMarkerClips(code);
   if (clips.length) {
     const definitions = document.createElementNS(SVG_NAMESPACE, "defs");
@@ -1037,6 +1276,7 @@ function appendSvgMarkers(svg, code) {
     svg.append(definitions);
   }
   markerPositions(code).forEach(([x, y], markerIndex) => {
+    if (getFinderSettings(markerIndex).markersAsModules) return;
     ["outer", "inner"].forEach((part) => {
       const { tag, attributes } = getMarkerShape(x, y, markerIndex, part);
       svg.append(setAttributes(document.createElementNS(SVG_NAMESPACE, tag), attributes));
@@ -1275,15 +1515,34 @@ function render() {
   const trimmedValue = elements.url.value.trim();
   const qrMode = trimmedValue ? detectTextMode(trimmedValue) : null;
   syncLogoGuideControl();
-  elements.markersAsModules.checked = state.markersAsModules;
-  elements.outerMarkerControls.hidden = state.markersAsModules;
-  elements.innerMarkerControls.hidden = state.markersAsModules;
+  const finderSettings = getFinderSettings();
+  elements.editAllFinderPatterns.setAttribute("aria-pressed", String(!state.editFindersIndividually));
+  elements.editAllFinderPatterns.setAttribute("aria-expanded", String(state.editFindersIndividually));
+  elements.finderPatternSelector.hidden = !state.editFindersIndividually;
+  elements.finderPatternOptions.forEach((button) => {
+    button.setAttribute("aria-pressed", String(state.editFindersIndividually && Number(button.dataset.finderPattern) === state.selectedFinderPattern));
+  });
+  elements.markersAsModules.checked = finderSettings.markersAsModules;
+  elements.outerMarkerControls.hidden = finderSettings.markersAsModules;
+  elements.innerMarkerControls.hidden = finderSettings.markersAsModules;
   updateEncodingMode(qrMode);
-  elements.outerMarkerColorValue.value = state.outerMarkerColor.toUpperCase();
-  elements.cutOuterMarkerCorners.checked = state.cutOuterMarkerCorners;
-  elements.outerMarkerCornersOnly.checked = state.outerMarkerCornersOnly;
-  elements.innerMarkerColorValue.value = state.innerMarkerColor.toUpperCase();
-  elements.moduleColorValue.value = state.moduleColor.toUpperCase();
+  for (const part of ["outer", "inner"]) {
+    elements[`${part}MarkerStyle`].value = finderSettings[`${part}MarkerStyle`];
+    elements[`${part}MarkerColor`].value = finderSettings[`${part}MarkerColor`];
+    elements[`${part}MarkerColorValue`].value = finderSettings[`${part}MarkerColor`].toUpperCase();
+  }
+  elements.cutOuterMarkerCorners.checked = finderSettings.cutOuterMarkerCorners;
+  elements.outerMarkerCornersOnly.checked = finderSettings.outerMarkerCornersOnly;
+  elements.moduleColorCount.value = state.moduleColorCount;
+  elements.moduleColorCount.setAttribute("aria-valuetext", `${state.moduleColorCount} ${state.moduleColorCount === 1 ? "color" : "colors"}`);
+  elements.moduleColorCountValue.textContent = String(state.moduleColorCount);
+  moduleColorControls.forEach((controls, index) => {
+    controls.group.hidden = index >= state.moduleColorCount;
+    controls.input.disabled = controls.group.hidden;
+    controls.hexInput.disabled = controls.group.hidden;
+    controls.input.value = getModuleColor(index);
+    controls.hexInput.value = getModuleColor(index).toUpperCase();
+  });
   elements.moduleStyle.value = state.moduleStyle;
   elements.polygonProperties.forEach((field) => { field.hidden = state.moduleStyle !== "regular-polygon"; });
   elements.shapeProperties.forEach((field) => { field.hidden = !["regular-polygon", "figure"].includes(state.moduleStyle); });
@@ -1296,17 +1555,32 @@ function render() {
     const key = button.dataset.moduleRandom;
     const supportsRandom = getRandomModuleProperties().some(([property]) => property === key);
     const isRandom = supportsRandom && state.moduleRandom[key];
+    const individual = key === "moduleCornerRadius" && supportsRandom && state.individualCorners;
+    const discrete = key === "moduleScale" && supportsRandom && state.discreteSizes;
     button.hidden = !supportsRandom;
     button.setAttribute("aria-pressed", String(state.moduleRandom[key]));
-    elements[key].closest(".range-control").hidden = isRandom;
-    elements[key].disabled = isRandom;
+    elements[key].closest(".range-control").hidden = isRandom || individual || discrete;
+    elements[key].disabled = isRandom || individual || discrete;
     const controls = moduleRandomControls.get(key);
-    controls.group.hidden = !isRandom;
-    controls.min.disabled = !isRandom;
-    controls.max.disabled = !isRandom;
-    button.previousElementSibling.htmlFor = isRandom ? controls.min.id : key;
+    controls.group.hidden = !isRandom || individual || discrete;
+    controls.min.disabled = !isRandom || individual || discrete;
+    controls.max.disabled = !isRandom || individual || discrete;
+    button.previousElementSibling.htmlFor = discrete ? elements.moduleSizeCount.id : individual
+      ? (isRandom ? individualCornerControls[0].random.min.id : individualCornerControls[0].input.id)
+      : (isRandom ? controls.min.id : key);
   });
-  elements.moduleSeedField.hidden = !hasRandomModuleProperties();
+  syncIndividualCornerControls();
+  elements.rotationQuarterTurnsToggle.setAttribute("aria-pressed", String(state.rotationQuarterTurns));
+  elements.moduleRotation.setAttribute("aria-label", state.rotationQuarterTurns ? "Initial module rotation for random 90° steps" : "Module rotation");
+  const supportsDiscreteSizes = getRandomModuleProperties().some(([key]) => key === "moduleScale");
+  elements.discreteSizesToggle.hidden = !supportsDiscreteSizes;
+  elements.discreteSizesToggle.setAttribute("aria-pressed", String(state.discreteSizes));
+  elements.moduleSizeCountControl.hidden = !supportsDiscreteSizes || !state.discreteSizes;
+  elements.moduleSizeCount.disabled = elements.moduleSizeCountControl.hidden;
+  elements.moduleSizeCount.value = state.moduleSizeCount;
+  elements.moduleSizeCount.setAttribute("aria-valuetext", `${state.moduleSizeCount} sizes`);
+  elements.moduleSizeCountValue.textContent = String(state.moduleSizeCount);
+  elements.moduleSeedField.hidden = !hasRandomModuleProperties() && state.moduleColorCount === 1;
   elements.moduleSeed.value = state.moduleSeed;
   elements.moduleSeedValue.textContent = String(state.moduleSeed);
   elements.moduleMergeOptions.forEach((button) => {
@@ -1318,15 +1592,7 @@ function render() {
     const controls = moduleRandomControls.get(key);
     const range = state.moduleRandomRanges[key];
     const limits = MODULE_RANDOM_PROPERTIES[key];
-    for (const bound of ["min", "max"]) {
-      controls[bound].value = range[bound];
-      controls[`${bound}Value`].textContent = `${range[bound]}${suffix}`;
-      controls[bound].setAttribute("aria-valuetext", `${range[bound]}${suffix}`);
-      const position = (range[bound] - limits.min) / (limits.max - limits.min) * 100;
-      controls.group.style.setProperty(`--range-${bound}`, `${position}%`);
-    }
-    controls.min.setAttribute("aria-valuemax", range.max);
-    controls.max.setAttribute("aria-valuemin", range.min);
+    syncRandomRangeControls(controls, range, limits, suffix);
   });
   elements.logoSizeValue.textContent = `${state.logoSize}%`;
 
@@ -1369,8 +1635,9 @@ function render() {
 }
 
 function setColor(key, value) {
-  state[key] = value.toLowerCase();
-  elements[key].value = state[key];
+  const settings = getAppearanceSettings(key);
+  settings[key] = value.toLowerCase();
+  elements[key].value = settings[key];
   render();
 }
 
@@ -1519,7 +1786,7 @@ elements.errorCorrection.addEventListener("change", () => {
 
 ["moduleStyle", "outerMarkerStyle", "innerMarkerStyle"].forEach((key) => {
   elements[key].addEventListener("change", () => {
-    state[key] = elements[key].value;
+    getAppearanceSettings(key)[key] = elements[key].value;
     render();
   });
 });
@@ -1598,8 +1865,27 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) releaseQrStructureHold();
 });
 
+elements.editAllFinderPatterns.addEventListener("click", () => {
+  if (!state.editFindersIndividually && !state.finderPatterns) {
+    state.finderPatterns = Array.from({ length: 3 }, () => (
+      Object.fromEntries(FINDER_PROPERTIES.map((key) => [key, state[key]]))
+    ));
+  }
+  state.editFindersIndividually = !state.editFindersIndividually;
+  render();
+});
+
+elements.finderPatternOptions.forEach((button) => {
+  const index = Number(button.dataset.finderPattern);
+  button.addEventListener("click", () => {
+    if (state.selectedFinderPattern === index) return;
+    state.selectedFinderPattern = index;
+    render();
+  });
+});
+
 elements.markersAsModules.addEventListener("change", () => {
-  state.markersAsModules = elements.markersAsModules.checked;
+  getFinderSettings().markersAsModules = elements.markersAsModules.checked;
   render();
 });
 
@@ -1613,9 +1899,41 @@ MODULE_RANGE_PROPERTIES.forEach(([key]) => {
 elements.moduleRandomOptions.forEach((button) => {
   button.addEventListener("click", () => {
     const key = button.dataset.moduleRandom;
+    if (key === "moduleRotation") state.rotationQuarterTurns = false;
+    if (key === "moduleScale") state.discreteSizes = false;
     state.moduleRandom[key] = !state.moduleRandom[key];
     render();
   });
+});
+
+elements.individualCornersToggle.addEventListener("click", () => {
+  if (!state.cornerRadii) {
+    state.cornerRadii = Array.from({ length: 9 }, () => ({ value: state.moduleCornerRadius, ...state.moduleRandomRanges.moduleCornerRadius }));
+  }
+  state.individualCorners = !state.individualCorners;
+  render();
+});
+
+elements.rotationQuarterTurnsToggle.addEventListener("click", () => {
+  state.rotationQuarterTurns = !state.rotationQuarterTurns;
+  state.moduleRandom.moduleRotation = false;
+  render();
+});
+
+elements.discreteSizesToggle.addEventListener("click", () => {
+  state.discreteSizes = !state.discreteSizes;
+  state.moduleRandom.moduleScale = false;
+  render();
+});
+
+elements.moduleSizeCount.addEventListener("input", () => {
+  state.moduleSizeCount = Number(elements.moduleSizeCount.value);
+  render();
+});
+
+elements.moduleColorCount.addEventListener("input", () => {
+  state.moduleColorCount = Number(elements.moduleColorCount.value);
+  render();
 });
 
 elements.moduleFigureOptions.forEach((button) => {
@@ -1629,10 +1947,10 @@ elements.moduleFigureOptions.forEach((button) => {
   });
 });
 
-moduleRandomControls.forEach((controls, key) => {
+function bindRandomRangeControls(controls, key, cornerIndex = null) {
   for (const bound of ["min", "max"]) {
     controls[bound].addEventListener("input", () => {
-      setRandomModuleBound(key, bound, Number(controls[bound].value));
+      setRandomModuleBound(key, bound, Number(controls[bound].value), cornerIndex);
     });
   }
 
@@ -1648,17 +1966,17 @@ moduleRandomControls.forEach((controls, key) => {
   controls.track.addEventListener("pointerdown", (event) => {
     if (!event.isPrimary || event.button !== 0 || event.target.matches("input")) return;
     const value = valueAtPointer(event);
-    const range = state.moduleRandomRanges[key];
+    const range = getModuleRandomRange(key, cornerIndex);
     const bound = value < (range.min + range.max) / 2 ? "min" : "max";
     event.preventDefault();
     railPointer = { id: event.pointerId, bound };
     controls[bound].focus({ preventScroll: true });
     controls.track.setPointerCapture(event.pointerId);
-    setRandomModuleBound(key, bound, value);
+    setRandomModuleBound(key, bound, value, cornerIndex);
   });
   controls.track.addEventListener("pointermove", (event) => {
     if (railPointer?.id !== event.pointerId) return;
-    setRandomModuleBound(key, railPointer.bound, valueAtPointer(event));
+    setRandomModuleBound(key, railPointer.bound, valueAtPointer(event), cornerIndex);
   });
   const endRailPointer = (event) => {
     if (railPointer?.id !== event.pointerId) return;
@@ -1668,6 +1986,15 @@ moduleRandomControls.forEach((controls, key) => {
   controls.track.addEventListener("pointerup", endRailPointer);
   controls.track.addEventListener("pointercancel", endRailPointer);
   controls.track.addEventListener("lostpointercapture", endRailPointer);
+}
+
+moduleRandomControls.forEach((controls, key) => bindRandomRangeControls(controls, key));
+individualCornerControls.forEach((controls, index) => {
+  controls.input.addEventListener("input", () => {
+    state.cornerRadii[index].value = Number(controls.input.value);
+    render();
+  });
+  bindRandomRangeControls(controls.random, "moduleCornerRadius", index);
 });
 
 elements.moduleSeed.addEventListener("input", () => {
@@ -1689,8 +2016,9 @@ elements.moduleMergeOptions.forEach((button) => {
   ["outerMarkerCornersOnly", "cutOuterMarkerCorners"],
 ].forEach(([key, otherKey]) => {
   elements[key].addEventListener("change", () => {
-    state[key] = elements[key].checked;
-    if (state[key]) state[otherKey] = false;
+    const settings = getFinderSettings();
+    settings[key] = elements[key].checked;
+    if (settings[key]) settings[otherKey] = false;
     render();
   });
 });
@@ -1762,21 +2090,19 @@ elements.clearLogoArea.addEventListener("change", () => {
   render();
 });
 
-["outerMarkerColor", "innerMarkerColor", "moduleColor"].forEach((key) => {
-  const colorInput = elements[key];
-  const hexInput = elements[`${key}Value`];
-  colorInput.addEventListener("input", () => setColor(key, colorInput.value));
+function bindColorEditor(colorInput, hexInput, getValue, applyValue) {
+  colorInput.addEventListener("input", () => applyValue(colorInput.value));
 
   hexInput.addEventListener("input", () => {
     const value = hexInput.value.trim();
     if (!/^#?[\da-f]{6}$/i.test(value)) return;
-    setColor(key, `#${value.replace("#", "")}`);
+    applyValue(`#${value.replace("#", "")}`);
   });
 
   hexInput.addEventListener("blur", () => {
     const value = hexInput.value.trim().replace("#", "");
     if (/^[\da-f]{3}$/i.test(value)) {
-      setColor(key, `#${[...value].map((character) => character.repeat(2)).join("")}`);
+      applyValue(`#${[...value].map((character) => character.repeat(2)).join("")}`);
     } else {
       render();
     }
@@ -1785,16 +2111,29 @@ elements.clearLogoArea.addEventListener("change", () => {
   hexInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") hexInput.blur();
     if (event.key === "Escape") {
-      hexInput.value = state[key].toUpperCase();
+      hexInput.value = getValue().toUpperCase();
       hexInput.blur();
     }
+  });
+}
+
+["outerMarkerColor", "innerMarkerColor", "moduleColor"].forEach((key) => {
+  bindColorEditor(elements[key], elements[`${key}Value`], () => getAppearanceSettings(key)[key], (value) => setColor(key, value));
+});
+moduleColorControls.slice(1).forEach((controls, index) => {
+  bindColorEditor(controls.input, controls.hexInput, () => getModuleColor(index + 1), (value) => {
+    state.moduleExtraColors[index] = value.toLowerCase();
+    render();
   });
 });
 
 function buildSvg(code, size) {
   const dimension = code.getModuleCount() + QUIET_ZONE * 2;
   let moduleData;
-  if (isCircuitStyle()) {
+  const palette = getModulePalettePaint(code);
+  if (palette) {
+    moduleData = `<defs><clipPath id="${MODULE_PALETTE_CLIP_ID}" clipPathUnits="userSpaceOnUse"><path d="${palette.clipData}"/></clipPath></defs><g clip-path="url(#${MODULE_PALETTE_CLIP_ID})" shape-rendering="crispEdges"><rect width="${palette.dimension}" height="${palette.dimension}" fill="${state.moduleColor}"/>${palette.groups.map(({ d, color }) => `<path d="${d}" fill="${color}"/>`).join("")}</g>`;
+  } else if (isCircuitStyle()) {
     const geometry = getCircuitGeometry(code);
     const trackData = circuitTrackPath(geometry);
     const dotData = circuitDotPath(geometry);
@@ -1802,7 +2141,8 @@ function buildSvg(code, size) {
   } else {
     moduleData = `<path d="${modulesToPath(code)}" fill="${state.moduleColor}"/>`;
   }
-  const markerData = state.markersAsModules ? "" : markerPositions(code).map(([x, y], markerIndex) => {
+  const markerData = markerPositions(code).map(([x, y], markerIndex) => {
+    if (getFinderSettings(markerIndex).markersAsModules) return "";
     return ["outer", "inner"].map((part) => {
       const { tag, attributes } = getMarkerShape(x, y, markerIndex, part);
       const data = Object.entries(attributes).map(([name, value]) => `${name}="${value}"`).join(" ");
@@ -1920,13 +2260,11 @@ function drawCanvasCircuit(context, geometry, moduleSize, offset) {
 }
 
 function drawCanvasMarkers(context, code, moduleSize, offset, quietZone) {
-  if (state.markersAsModules) return;
-  context.fillStyle = state.innerMarkerColor;
-  context.strokeStyle = state.outerMarkerColor;
   context.lineWidth = moduleSize;
   context.lineCap = "butt";
 
   markerPositions(code, quietZone).forEach(([moduleX, moduleY], markerIndex) => {
+    if (getFinderSettings(markerIndex).markersAsModules) return;
     const x = offset + moduleX * moduleSize;
     const y = offset + moduleY * moduleSize;
 
@@ -1934,8 +2272,10 @@ function drawCanvasMarkers(context, code, moduleSize, offset, quietZone) {
       const { tag, attributes } = getMarkerShape(x, y, markerIndex, part, moduleSize);
       const draw = part === "outer" ? "stroke" : "fill";
       context.save();
-      if (part === "outer" && hasOuterMarkerClip()) {
-        context.clip(new Path2D(outerMarkerClipCommand(x, y, moduleSize)));
+      if (part === "outer") context.strokeStyle = attributes.stroke;
+      else context.fillStyle = attributes.fill;
+      if (part === "outer" && hasOuterMarkerClip(markerIndex)) {
+        context.clip(new Path2D(outerMarkerClipCommand(x, y, moduleSize, markerIndex)));
       }
       if (tag === "path") {
         context[draw](new Path2D(attributes.d));
@@ -1955,6 +2295,33 @@ function drawCanvasMarkers(context, code, moduleSize, offset, quietZone) {
   });
 }
 
+function drawCanvasModulePalette(context, palette, moduleSize, offset, quietZone) {
+  if (!palette.clipData) return;
+  context.save();
+  context.fillStyle = state.moduleColor;
+  context.translate(offset, offset);
+  context.scale(moduleSize, moduleSize);
+  context.fill(new Path2D(palette.clipData));
+  context.restore();
+  // Draw the original alpha coverage once. Coloring cells with source-atop
+  // on the same canvas preserves subpixel coverage with the finder patterns.
+  context.save();
+  context.globalCompositeOperation = "source-atop";
+  palette.groups.forEach(({ color, cells }) => {
+    context.fillStyle = color;
+    context.beginPath();
+    cells.forEach(([row, column]) => {
+      const left = Math.round(offset + (column + quietZone) * moduleSize);
+      const top = Math.round(offset + (row + quietZone) * moduleSize);
+      const right = Math.round(offset + (column + quietZone + 1) * moduleSize);
+      const bottom = Math.round(offset + (row + quietZone + 1) * moduleSize);
+      context.rect(left, top, right - left, bottom - top);
+    });
+    context.fill();
+  });
+  context.restore();
+}
+
 function drawQrToCanvas(context, code, size) {
   const count = code.getModuleCount();
   // Use whole pixels per module whenever possible. This avoids soft or uneven
@@ -1971,7 +2338,10 @@ function drawQrToCanvas(context, code, size) {
   context.clearRect(0, 0, size, size);
   context.fillStyle = state.moduleColor;
 
-  if (isCircuitStyle()) {
+  const palette = getModulePalettePaint(code, quietZone);
+  if (palette) {
+    drawCanvasModulePalette(context, palette, moduleSize, offset, quietZone);
+  } else if (isCircuitStyle()) {
     drawCanvasCircuit(context, getCircuitGeometry(code, quietZone), moduleSize, offset);
   } else if (["regular-polygon", "figure"].includes(state.moduleStyle)) {
     context.save();

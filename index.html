@@ -7,9 +7,9 @@
     <meta name="description" content="QR code generator with SVG and PNG export.">
     <title>QR Generator</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=20261104-25">
+    <link rel="stylesheet" href="styles.css?v=20261105-7">
     <script src="vendor/qrcode.js" defer></script>
-    <script src="script.js?v=20261104-42" defer></script>
+    <script src="script.js?v=20261105-8" defer></script>
   </head>
   <body>
     <main>
@@ -106,6 +106,9 @@
                   <button type="button" class="shuffle-button" data-module-random="moduleScale" aria-label="Randomize module size" aria-pressed="false" aria-controls="moduleScaleControl moduleScaleRandomControl" title="Randomize size">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18 3 3 3-3 3m0 6 3 3-3 3M3 6h2c5 0 9 12 14 12h2M3 18h2c5 0 9-12 14-12h2"/></svg>
                   </button>
+                  <button id="discreteSizesToggle" type="button" class="shuffle-button" aria-label="Random size steps" title="Random size steps" aria-pressed="false" aria-controls="moduleSizeCountControl">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M4 20v-5h4v5m2 0V9h4v11m2 0V4h4v16"/></svg>
+                  </button>
                 </div>
                 <span id="moduleScaleControl" class="range-control">
                   <input id="moduleScale" type="range" min="70" max="100" step="1" value="100">
@@ -120,12 +123,19 @@
                   </div>
                   <output data-bound-value="max" for="moduleScaleMax">100%</output>
                 </div>
+                <span id="moduleSizeCountControl" class="range-control" hidden>
+                  <input id="moduleSizeCount" type="range" min="2" max="3" step="1" value="2" aria-label="Number of random module sizes">
+                  <output id="moduleSizeCountValue" for="moduleSizeCount">2</output>
+                </span>
               </div>
               <div class="range-field polygon-property style-property">
                 <div class="property-heading">
                   <label for="moduleCornerRadius">Corner radius</label>
-                  <button type="button" class="shuffle-button" data-module-random="moduleCornerRadius" aria-label="Randomize module corner radius" aria-pressed="false" aria-controls="moduleCornerRadiusControl moduleCornerRadiusRandomControl" title="Randomize corner radius">
+                  <button type="button" class="shuffle-button" data-module-random="moduleCornerRadius" aria-label="Randomize module corner radius" aria-pressed="false" aria-controls="moduleCornerRadiusControl moduleCornerRadiusRandomControl individualCornerControls" title="Randomize corner radius">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18 3 3 3-3 3m0 6 3 3-3 3M3 6h2c5 0 9 12 14 12h2M3 18h2c5 0 9-12 14-12h2"/></svg>
+                  </button>
+                  <button id="individualCornersToggle" type="button" class="shuffle-button" aria-label="Edit corners individually" title="Edit corners individually" aria-pressed="false" aria-controls="individualCornerControls">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m6 0h6v-6"/></svg>
                   </button>
                 </div>
                 <span id="moduleCornerRadiusControl" class="range-control">
@@ -141,12 +151,16 @@
                   </div>
                   <output data-bound-value="max" for="moduleCornerRadiusMax">100%</output>
                 </div>
+                <div id="individualCornerControls" class="individual-corner-controls" role="group" aria-label="Individual corner radii" hidden></div>
               </div>
               <div class="range-field shape-property style-property">
                 <div class="property-heading">
                   <label for="moduleRotation">Rotation</label>
                   <button type="button" class="shuffle-button" data-module-random="moduleRotation" aria-label="Randomize module rotation" aria-pressed="false" aria-controls="moduleRotationControl moduleRotationRandomControl" title="Randomize rotation">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18 3 3 3-3 3m0 6 3 3-3 3M3 6h2c5 0 9 12 14 12h2M3 18h2c5 0 9-12 14-12h2"/></svg>
+                  </button>
+                  <button id="rotationQuarterTurnsToggle" type="button" class="shuffle-button" aria-label="Random 90° steps" title="Random 90° steps" aria-pressed="false" aria-controls="moduleRotationControl">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18m-4-4 4 4-4 4M8 7l4-4 4 4M8 17l4 4 4-4M7 8l-4 4 4 4"/></svg>
                   </button>
                 </div>
                 <span id="moduleRotationControl" class="range-control">
@@ -173,83 +187,105 @@
                   <button type="button" data-module-merge="square-groups" aria-pressed="false">Square groups</button>
                 </div>
               </div>
-              <div class="color-field style-property">
-                <label for="moduleColor">Color</label>
-                <span class="color-input-wrap">
-                  <input id="moduleColor" type="color" value="#202020" aria-label="Module color">
-                  <input id="moduleColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Module hex color value">
+              <div class="range-field style-property">
+                <div class="property-heading"><label for="moduleColorCount">Color</label></div>
+                <span class="range-control">
+                  <input id="moduleColorCount" type="range" min="1" max="4" step="1" value="1" aria-label="Number of module colors">
+                  <output id="moduleColorCountValue" for="moduleColorCount">1</output>
                 </span>
+                <div id="moduleColorEditors" class="module-color-editors" role="group" aria-label="Module colors">
+                  <span class="color-input-wrap">
+                    <input id="moduleColor" type="color" value="#202020" aria-label="Module color 1">
+                    <input id="moduleColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Module hex color 1 value">
+                  </span>
+                </div>
               </div>
             </div>
           </section>
 
-          <section class="controls appearance-controls" aria-label="QR appearance">
-            <div class="style-controls">
-              <label class="toggle-field marker-mode-toggle" for="markersAsModules">
-                <span>Markers as modules</span>
-                <span class="toggle-switch">
-                  <input id="markersAsModules" type="checkbox" aria-controls="outerMarkerControls innerMarkerControls">
-                  <span class="toggle-track" aria-hidden="true"></span>
-                </span>
-              </label>
-              <div id="outerMarkerControls" class="style-group">
-                <label class="field" for="outerMarkerStyle">
-                  <span>Outer Marker</span>
-                  <select id="outerMarkerStyle">
-                    <option value="square">Square</option>
-                    <option value="rounded" selected>Rounded</option>
-                    <option value="outer-rounded">Rounded (outer)</option>
-                    <option value="inner-rounded">Rounded (inner)</option>
-                    <option value="opposite-inward-rounded">Rounded pair (inward)</option>
-                    <option value="opposite-outward-rounded">Rounded pair (outward)</option>
-                    <option value="circle">Circle</option>
-                  </select>
-                </label>
-                <div class="color-field style-property">
-                  <label for="outerMarkerColor">Color</label>
-                  <span class="color-input-wrap">
-                    <input id="outerMarkerColor" type="color" value="#202020" aria-label="Outer marker color">
-                    <input id="outerMarkerColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Outer marker hex color value">
-                  </span>
+          <section class="finder-patterns-section" aria-labelledby="finderPatternsTitle">
+            <div class="finder-pattern-heading">
+              <h2 id="finderPatternsTitle" class="section-title">Finder Patterns</h2>
+              <div class="finder-edit-controls" role="group" aria-label="Finder pattern editing">
+                <button id="editAllFinderPatterns" type="button" class="shuffle-button" aria-label="Edit all finder patterns" title="Edit all finder patterns" aria-pressed="true" aria-expanded="false" aria-controls="finderPatternSelector">
+                  <svg data-finder-link="linked" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7H7a5 5 0 0 0 0 10h2m6-10h2a5 5 0 0 1 0 10h-2M8 12h8"/></svg>
+                  <svg data-finder-link="unlinked" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7H7a5 5 0 0 0 0 10h2m6-10h2a5 5 0 0 1 0 10h-2M8 12h2m4 0h2"/></svg>
+                </button>
+                <div id="finderPatternSelector" class="finder-pattern-control" role="group" aria-label="Finder pattern to edit" hidden>
+                  <button type="button" class="shuffle-button" data-finder-pattern="0" aria-label="Top-left finder pattern" title="Top-left finder pattern" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 19 5 5M5 17V5h12"/></svg></button>
+                  <button type="button" class="shuffle-button" data-finder-pattern="1" aria-label="Top-right finder pattern" title="Top-right finder pattern" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M7 5h12v12"/></svg></button>
+                  <button type="button" class="shuffle-button" data-finder-pattern="2" aria-label="Bottom-left finder pattern" title="Bottom-left finder pattern" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 5 5 19M5 7v12h12"/></svg></button>
                 </div>
-                <label class="toggle-field style-property" for="cutOuterMarkerCorners">
-                  <span>Cut corners</span>
+              </div>
+            </div>
+            <div class="controls appearance-controls">
+              <div class="style-controls">
+                <label class="toggle-field marker-mode-toggle" for="markersAsModules">
+                  <span>Markers as modules</span>
                   <span class="toggle-switch">
-                    <input id="cutOuterMarkerCorners" type="checkbox" aria-label="Cut outer marker corners">
+                    <input id="markersAsModules" type="checkbox" aria-controls="outerMarkerControls innerMarkerControls">
                     <span class="toggle-track" aria-hidden="true"></span>
                   </span>
                 </label>
-                <label class="toggle-field style-property" for="outerMarkerCornersOnly">
-                  <span>Corners only</span>
-                  <span class="toggle-switch">
-                    <input id="outerMarkerCornersOnly" type="checkbox" aria-label="Show only outer marker corners">
-                    <span class="toggle-track" aria-hidden="true"></span>
-                  </span>
-                </label>
-              </div>
-
-              <div id="innerMarkerControls" class="style-group">
-                <label class="field" for="innerMarkerStyle">
-                  <span>Inner Marker</span>
-                  <select id="innerMarkerStyle">
-                    <option value="square">Square</option>
-                    <option value="rounded" selected>Rounded</option>
-                    <option value="outer-rounded">Rounded (outer)</option>
-                    <option value="inner-rounded">Rounded (inner)</option>
-                    <option value="opposite-inward-rounded">Rounded pair (inward)</option>
-                    <option value="opposite-outward-rounded">Rounded pair (outward)</option>
-                    <option value="circle">Circle</option>
-                  </select>
-                </label>
-                <div class="color-field style-property">
-                  <label for="innerMarkerColor">Color</label>
-                  <span class="color-input-wrap">
-                    <input id="innerMarkerColor" type="color" value="#202020" aria-label="Inner marker color">
-                    <input id="innerMarkerColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Inner marker hex color value">
-                  </span>
+                <div id="outerMarkerControls" class="style-group">
+                  <label class="field" for="outerMarkerStyle">
+                    <span>Outer Marker</span>
+                    <select id="outerMarkerStyle">
+                      <option value="square">Square</option>
+                      <option value="rounded" selected>Rounded</option>
+                      <option value="outer-rounded">Rounded (outer)</option>
+                      <option value="inner-rounded">Rounded (inner)</option>
+                      <option value="opposite-inward-rounded">Rounded pair (inward)</option>
+                      <option value="opposite-outward-rounded">Rounded pair (outward)</option>
+                      <option value="circle">Circle</option>
+                    </select>
+                  </label>
+                  <div class="color-field style-property">
+                    <label for="outerMarkerColor">Color</label>
+                    <span class="color-input-wrap">
+                      <input id="outerMarkerColor" type="color" value="#202020" aria-label="Outer marker color">
+                      <input id="outerMarkerColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Outer marker hex color value">
+                    </span>
+                  </div>
+                  <label class="toggle-field style-property" for="cutOuterMarkerCorners">
+                    <span>Cut corners</span>
+                    <span class="toggle-switch">
+                      <input id="cutOuterMarkerCorners" type="checkbox" aria-label="Cut outer marker corners">
+                      <span class="toggle-track" aria-hidden="true"></span>
+                    </span>
+                  </label>
+                  <label class="toggle-field style-property" for="outerMarkerCornersOnly">
+                    <span>Corners only</span>
+                    <span class="toggle-switch">
+                      <input id="outerMarkerCornersOnly" type="checkbox" aria-label="Show only outer marker corners">
+                      <span class="toggle-track" aria-hidden="true"></span>
+                    </span>
+                  </label>
                 </div>
-              </div>
 
+                <div id="innerMarkerControls" class="style-group">
+                  <label class="field" for="innerMarkerStyle">
+                    <span>Inner Marker</span>
+                    <select id="innerMarkerStyle">
+                      <option value="square">Square</option>
+                      <option value="rounded" selected>Rounded</option>
+                      <option value="outer-rounded">Rounded (outer)</option>
+                      <option value="inner-rounded">Rounded (inner)</option>
+                      <option value="opposite-inward-rounded">Rounded pair (inward)</option>
+                      <option value="opposite-outward-rounded">Rounded pair (outward)</option>
+                      <option value="circle">Circle</option>
+                    </select>
+                  </label>
+                  <div class="color-field style-property">
+                    <label for="innerMarkerColor">Color</label>
+                    <span class="color-input-wrap">
+                      <input id="innerMarkerColor" type="color" value="#202020" aria-label="Inner marker color">
+                      <input id="innerMarkerColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Inner marker hex color value">
+                    </span>
+                  </div>
+                </div>
+
+              </div>
             </div>
           </section>
 
