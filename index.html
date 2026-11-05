@@ -7,9 +7,9 @@
     <meta name="description" content="QR code generator with SVG and PNG export.">
     <title>QR Generator</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=20261105-7">
+    <link rel="stylesheet" href="styles.css?v=20261105-9">
     <script src="vendor/qrcode.js" defer></script>
-    <script src="script.js?v=20261105-9" defer></script>
+    <script src="script.js?v=20261105-11" defer></script>
   </head>
   <body>
     <main>
@@ -231,21 +231,22 @@
                   <label class="field" for="outerMarkerStyle">
                     <span>Outer Marker</span>
                     <select id="outerMarkerStyle">
-                      <option value="square">Square</option>
-                      <option value="rounded" selected>Rounded</option>
-                      <option value="outer-rounded">Rounded (outer)</option>
-                      <option value="inner-rounded">Rounded (inner)</option>
-                      <option value="opposite-inward-rounded">Rounded pair (inward)</option>
-                      <option value="opposite-outward-rounded">Rounded pair (outward)</option>
-                      <option value="circle">Circle</option>
+                      <option value="regular-polygon" selected>Regular polygon</option>
                     </select>
                   </label>
-                  <div class="color-field style-property">
-                    <label for="outerMarkerColor">Color</label>
-                    <span class="color-input-wrap">
-                      <input id="outerMarkerColor" type="color" value="#202020" aria-label="Outer marker color">
-                      <input id="outerMarkerColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Outer marker hex color value">
+                  <div id="outerPolygonProperties" class="finder-polygon-properties"></div>
+                  <div class="range-field style-property">
+                    <div class="property-heading"><label for="outerColorCount">Color</label></div>
+                    <span class="range-control">
+                      <input id="outerColorCount" type="range" min="1" max="4" step="1" value="1" aria-label="Number of outer marker colors">
+                      <output id="outerColorCountValue" for="outerColorCount">1</output>
                     </span>
+                    <div id="outerColorEditors" class="module-color-editors" role="group" aria-label="Outer marker colors">
+                      <span class="color-input-wrap">
+                        <input id="outerMarkerColor" type="color" value="#202020" aria-label="Outer marker color 1">
+                        <input id="outerMarkerColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Outer marker hex color 1 value">
+                      </span>
+                    </div>
                   </div>
                   <label class="toggle-field style-property" for="cutOuterMarkerCorners">
                     <span>Cut corners</span>
@@ -267,21 +268,22 @@
                   <label class="field" for="innerMarkerStyle">
                     <span>Inner Marker</span>
                     <select id="innerMarkerStyle">
-                      <option value="square">Square</option>
-                      <option value="rounded" selected>Rounded</option>
-                      <option value="outer-rounded">Rounded (outer)</option>
-                      <option value="inner-rounded">Rounded (inner)</option>
-                      <option value="opposite-inward-rounded">Rounded pair (inward)</option>
-                      <option value="opposite-outward-rounded">Rounded pair (outward)</option>
-                      <option value="circle">Circle</option>
+                      <option value="regular-polygon" selected>Regular polygon</option>
                     </select>
                   </label>
-                  <div class="color-field style-property">
-                    <label for="innerMarkerColor">Color</label>
-                    <span class="color-input-wrap">
-                      <input id="innerMarkerColor" type="color" value="#202020" aria-label="Inner marker color">
-                      <input id="innerMarkerColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Inner marker hex color value">
+                  <div id="innerPolygonProperties" class="finder-polygon-properties"></div>
+                  <div class="range-field style-property">
+                    <div class="property-heading"><label for="innerColorCount">Color</label></div>
+                    <span class="range-control">
+                      <input id="innerColorCount" type="range" min="1" max="4" step="1" value="1" aria-label="Number of inner marker colors">
+                      <output id="innerColorCountValue" for="innerColorCount">1</output>
                     </span>
+                    <div id="innerColorEditors" class="module-color-editors" role="group" aria-label="Inner marker colors">
+                      <span class="color-input-wrap">
+                        <input id="innerMarkerColor" type="color" value="#202020" aria-label="Inner marker color 1">
+                        <input id="innerMarkerColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Inner marker hex color 1 value">
+                      </span>
+                    </div>
                   </div>
                 </div>
 

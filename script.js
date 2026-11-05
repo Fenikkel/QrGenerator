@@ -8,10 +8,10 @@ const defaults = {
   moduleFigure: "cross",
   markersAsModules: false,
   showQrStructure: false,
-  outerMarkerStyle: "rounded",
+  outerMarkerStyle: "regular-polygon",
   cutOuterMarkerCorners: false,
   outerMarkerCornersOnly: false,
-  innerMarkerStyle: "rounded",
+  innerMarkerStyle: "regular-polygon",
   moduleScale: 100,
   moduleSides: 4,
   moduleCornerRadius: 0,
@@ -29,6 +29,8 @@ const state = {
   editFindersIndividually: false,
   selectedFinderPattern: 0,
   finderPatterns: null,
+  outerPolygon: createFinderPolygonSettings(),
+  innerPolygon: createFinderPolygonSettings(),
   individualCorners: false,
   cornerRadii: null,
   rotationQuarterTurns: false,
@@ -140,6 +142,7 @@ const MODULE_PALETTE_CLIP_ID = "module-palette-clip";
 const FINDER_PROPERTIES = [
   "markersAsModules", "outerMarkerStyle", "innerMarkerStyle",
   "outerMarkerColor", "innerMarkerColor", "cutOuterMarkerCorners", "outerMarkerCornersOnly",
+  "outerPolygon", "innerPolygon",
 ];
 const MODULE_RANGE_PROPERTIES = [
   ["moduleSides", ""], ["moduleScale", "%"],
@@ -158,6 +161,10 @@ const MODULE_RANDOM_PROPERTIES = {
 const moduleRandomControls = new Map(Array.from(elements.moduleRandomRanges, (group) => [group.dataset.moduleRandomRange, getRandomRangeControls(group)]));
 const individualCornerControls = createIndividualCornerControls();
 const moduleColorControls = createModuleColorControls();
+const outerPolygonControls = createFinderPolygonControls("outer");
+const innerPolygonControls = createFinderPolygonControls("inner");
+const finderPolygonControls = { outer: outerPolygonControls, inner: innerPolygonControls };
+const finderPolygonCache = new Map();
 const QR_STRUCTURE_REGIONS = [
   { id: "finder", label: "Finder patterns", color: "#EF4444" },
   { id: "separators", label: "Separators", color: "#10B981" },
@@ -333,18 +340,226 @@ function circleCommand(centerX, centerY, radius) {
   return `M${right} ${center}a${r} ${r} 0 0 1 -${r} ${r}a${r} ${r} 0 0 1 -${r} -${r}a${r} ${r} 0 0 1 ${r} -${r}a${r} ${r} 0 0 1 ${r} ${r}Z`;
 }
 
-function createModuleColorControls() {
+function createFinderPolygonSettings() {
+  return {
+    moduleSides: 4, moduleScale: 100, moduleCornerRadius: 0, moduleRotation: 0,
+    individualCorners: false, cornerRadii: null, rotationQuarterTurns: false,
+    discreteSizes: false, moduleSizeCount: 2, colorCount: 1,
+    extraColors: Array(3).fill("#202020"),
+    random: { moduleSides: false, moduleScale: false, moduleCornerRadius: false, moduleRotation: false },
+    ranges: {
+      moduleSides: { min: 3, max: 9 }, moduleScale: { min: 70, max: 100 },
+      moduleCornerRadius: { min: 0, max: 100 }, moduleRotation: { min: 0, max: 360 },
+    },
+  };
+}
+
+function createFinderPolygonControls(part) {
+  const container = document.querySelector(`#${part}PolygonProperties`);
+  const owner = `${part === "outer" ? "Outer" : "Inner"} marker`;
+  const controls = {};
+  const controlId = (id) => `${part}${id[0].toUpperCase()}${id.slice(1)}`;
+  MODULE_RANGE_PROPERTIES.forEach(([key]) => {
+    // Clone the established controls before binding listeners, with independent IDs.
+    const field = elements[key].closest(".range-field").cloneNode(true);
+    field.classList.remove("polygon-property", "shape-property", "module-size-field", "style-property");
+    field.querySelectorAll("[id], [for], [aria-controls], [aria-label], [data-module-random], [data-module-random-range]").forEach((node) => {
+      for (const attribute of ["id", "for", "aria-controls"]) {
+        if (node.hasAttribute(attribute)) node.setAttribute(attribute, node.getAttribute(attribute).split(" ").map(controlId).join(" "));
+      }
+      if (node.hasAttribute("aria-label")) node.setAttribute("aria-label", node.getAttribute("aria-label").replace(/module/gi, owner));
+      for (const attribute of ["random", "random-range"]) {
+        const original = `data-module-${attribute}`;
+        if (node.hasAttribute(original)) {
+          node.setAttribute(`data-${part}-${attribute}`, node.getAttribute(original));
+          node.removeAttribute(original);
+        }
+      }
+    });
+    container.append(field);
+    const input = field.querySelector(`#${controlId(key)}`);
+    const random = getRandomRangeControls(field.querySelector(`[data-${part}-random-range]`));
+    const button = field.querySelector(`[data-${part}-random]`);
+    controls[key] = { field, input, output: field.querySelector(`#${controlId(key)}Value`), manual: input.closest(".range-control"), random, button, label: field.querySelector("label") };
+    input.addEventListener("input", () => { getFinderSettings()[`${part}Polygon`][key] = Number(input.value); render(); });
+    button.addEventListener("click", () => {
+      const settings = getFinderSettings()[`${part}Polygon`];
+      if (key === "moduleScale") settings.discreteSizes = false;
+      if (key === "moduleRotation") settings.rotationQuarterTurns = false;
+      settings.random[key] = !settings.random[key];
+      render();
+    });
+    const range = () => getFinderSettings()[`${part}Polygon`].ranges[key];
+    bindRandomRangeControls(random, key, null, { getRange: range, setBound: (bound, value) => setFinderRandomBound(part, key, bound, value) });
+  });
+  controls.cornerContainer = container.querySelector(`#${controlId("individualCornerControls")}`);
+  controls.cornerContainer.replaceChildren();
+  controls.corners = createIndividualCornerControls({ prefix: `${part}Corner`, container: controls.cornerContainer, source: controls.moduleCornerRadius.input, randomSource: controls.moduleCornerRadius.random.group, label: owner });
+  controls.corners.forEach((corner, index) => {
+    corner.input.addEventListener("input", () => { getFinderSettings()[`${part}Polygon`].cornerRadii[index].value = Number(corner.input.value); render(); });
+    bindRandomRangeControls(corner.random, "moduleCornerRadius", index, {
+      getRange: () => getFinderSettings()[`${part}Polygon`].cornerRadii[index],
+      setBound: (bound, value) => setFinderRandomBound(part, "moduleCornerRadius", bound, value, index),
+    });
+  });
+  controls.individual = container.querySelector(`#${controlId("individualCornersToggle")}`);
+  controls.individual.addEventListener("click", () => {
+    const settings = getFinderSettings()[`${part}Polygon`];
+    settings.cornerRadii ||= Array.from({ length: 9 }, () => ({ value: settings.moduleCornerRadius, ...settings.ranges.moduleCornerRadius }));
+    settings.individualCorners = !settings.individualCorners;
+    render();
+  });
+  controls.quarters = container.querySelector(`#${controlId("rotationQuarterTurnsToggle")}`);
+  controls.discrete = container.querySelector(`#${controlId("discreteSizesToggle")}`);
+  for (const [button, mode, key] of [[controls.quarters, "rotationQuarterTurns", "moduleRotation"], [controls.discrete, "discreteSizes", "moduleScale"]]) {
+    button.addEventListener("click", () => {
+      const settings = getFinderSettings()[`${part}Polygon`];
+      settings[mode] = !settings[mode];
+      settings.random[key] = false;
+      render();
+    });
+  }
+  controls.sizeCount = container.querySelector(`#${controlId("moduleSizeCount")}`);
+  controls.sizeCountOutput = container.querySelector(`#${controlId("moduleSizeCountValue")}`);
+  controls.sizeCountControl = container.querySelector(`#${controlId("moduleSizeCountControl")}`);
+  controls.sizeCount.addEventListener("input", () => { getFinderSettings()[`${part}Polygon`].moduleSizeCount = Number(controls.sizeCount.value); render(); });
+  controls.colorCount = document.querySelector(`#${part}ColorCount`);
+  controls.colorCountOutput = document.querySelector(`#${part}ColorCountValue`);
+  controls.colorCount.addEventListener("input", () => { getFinderSettings()[`${part}Polygon`].colorCount = Number(controls.colorCount.value); render(); });
+  controls.colors = createModuleColorControls(elements[`${part}MarkerColor`], document.querySelector(`#${part}ColorEditors`), `${part}MarkerColor`, owner);
+  return controls;
+}
+
+function setFinderRandomBound(part, key, bound, value, cornerIndex = null) {
+  const settings = getFinderSettings()[`${part}Polygon`];
+  const range = cornerIndex === null ? settings.ranges[key] : settings.cornerRadii[cornerIndex];
+  const limits = MODULE_RANDOM_PROPERTIES[key];
+  const next = Math.max(bound === "min" ? limits.min : range.min, Math.min(bound === "max" ? limits.max : range.max, Math.round(value)));
+  const controls = cornerIndex === null ? finderPolygonControls[part][key].random : finderPolygonControls[part].corners[cornerIndex].random;
+  controls[bound].value = next;
+  if (range[bound] === next) return;
+  range[bound] = next;
+  render();
+}
+
+function syncFinderPolygonControls(part) {
+  const finder = getFinderSettings();
+  const settings = finder[`${part}Polygon`];
+  const editor = finderPolygonControls[part];
+  MODULE_RANGE_PROPERTIES.forEach(([key, suffix]) => {
+    const control = editor[key];
+    const random = settings.random[key];
+    const individual = key === "moduleCornerRadius" && settings.individualCorners;
+    const discrete = key === "moduleScale" && settings.discreteSizes;
+    control.button.setAttribute("aria-pressed", String(random));
+    control.input.value = settings[key];
+    control.output.textContent = `${settings[key]}${suffix}`;
+    control.manual.hidden = random || individual || discrete;
+    control.input.disabled = control.manual.hidden;
+    control.random.group.hidden = !random || individual || discrete;
+    control.random.min.disabled = control.random.max.disabled = control.random.group.hidden;
+    syncRandomRangeControls(control.random, settings.ranges[key], MODULE_RANDOM_PROPERTIES[key], suffix);
+    control.label.htmlFor = discrete ? editor.sizeCount.id : individual
+      ? (random ? editor.corners[0].random.min.id : editor.corners[0].input.id)
+      : random ? control.random.min.id : control.input.id;
+  });
+  editor.individual.setAttribute("aria-pressed", String(settings.individualCorners));
+  editor.cornerContainer.hidden = !settings.individualCorners;
+  const count = settings.random.moduleSides ? settings.ranges.moduleSides.max : settings.moduleSides;
+  editor.corners.forEach((control, index) => {
+    const visible = settings.individualCorners && index < count;
+    const corner = settings.cornerRadii?.[index] || { value: settings.moduleCornerRadius, ...settings.ranges.moduleCornerRadius };
+    const random = settings.random.moduleCornerRadius;
+    control.field.hidden = !visible;
+    control.manual.hidden = random;
+    control.input.disabled = !visible || random;
+    control.input.value = corner.value;
+    control.output.textContent = `${corner.value}%`;
+    control.random.group.hidden = !random;
+    control.random.min.disabled = control.random.max.disabled = !visible || !random;
+    control.label.htmlFor = random ? control.random.min.id : control.input.id;
+    syncRandomRangeControls(control.random, corner, MODULE_RANDOM_PROPERTIES.moduleCornerRadius, "%");
+  });
+  editor.quarters.setAttribute("aria-pressed", String(settings.rotationQuarterTurns));
+  editor.moduleRotation.input.setAttribute("aria-label", settings.rotationQuarterTurns ? `Initial ${part} marker rotation for random 90° steps` : `${part === "outer" ? "Outer" : "Inner"} marker rotation`);
+  editor.discrete.setAttribute("aria-pressed", String(settings.discreteSizes));
+  editor.sizeCountControl.hidden = !settings.discreteSizes;
+  editor.sizeCount.disabled = !settings.discreteSizes;
+  editor.sizeCount.value = settings.moduleSizeCount;
+  editor.sizeCount.setAttribute("aria-valuetext", `${settings.moduleSizeCount} sizes`);
+  editor.sizeCountOutput.textContent = String(settings.moduleSizeCount);
+  editor.colorCount.value = settings.colorCount;
+  editor.colorCount.setAttribute("aria-valuetext", `${settings.colorCount} colors`);
+  editor.colorCountOutput.textContent = String(settings.colorCount);
+  editor.colors.forEach((control, index) => {
+    const color = index === 0 ? finder[`${part}MarkerColor`] : settings.extraColors[index - 1];
+    control.group.hidden = index >= settings.colorCount;
+    control.input.disabled = control.hexInput.disabled = control.group.hidden;
+    control.input.value = color;
+    control.hexInput.value = color.toUpperCase();
+  });
+}
+
+function hasRandomFinderProperties() {
+  return [0, 1, 2].some((index) => {
+    const finder = getFinderSettings(index);
+    return !finder.markersAsModules && ["outer", "inner"].some((part) => {
+      const settings = finder[`${part}Polygon`];
+      return Object.values(settings.random).some(Boolean) || settings.discreteSizes || settings.rotationQuarterTurns || settings.colorCount > 1;
+    });
+  });
+}
+
+function getFinderPolygon(markerIndex, part = "outer") {
+  const finder = getFinderSettings(markerIndex);
+  const settings = finder[`${part}Polygon`];
+  const cacheIndex = `${part}:${markerIndex}`;
+  const cacheKey = JSON.stringify([state.moduleSeed, settings, finder[`${part}MarkerColor`]]);
+  if (finderPolygonCache.get(cacheIndex)?.key === cacheKey) return finderPolygonCache.get(cacheIndex).value;
+  // Separate domains preserve Module and Outer distributions when Inner changes.
+  const domain = part === "outer" ? 1000 : 3000;
+  const fraction = (key, cornerIndex = null) => randomModuleFraction(key, -domain - 1 - markerIndex, -domain - 1001, cornerIndex);
+  const randomValue = (key, cornerIndex = null) => {
+    const { min, max } = cornerIndex === null ? settings.ranges[key] : settings.cornerRadii[cornerIndex];
+    return min + Math.floor(fraction(key, cornerIndex) * (max - min + 1));
+  };
+  const properties = Object.fromEntries(MODULE_RANGE_PROPERTIES.map(([key]) => [key, settings.random[key] ? randomValue(key) : settings[key]]));
+  if (settings.discreteSizes) properties.moduleScale = 70 + 30 * Math.floor(fraction("moduleScale") * settings.moduleSizeCount) / (settings.moduleSizeCount - 1);
+  if (settings.rotationQuarterTurns) properties.moduleRotation = (settings.moduleRotation + Math.floor(fraction("moduleRotation") * 4) * 90) % 360;
+  if (settings.individualCorners) properties.moduleCornerRadii = Array.from({ length: properties.moduleSides }, (_, index) => settings.random.moduleCornerRadius ? randomValue("moduleCornerRadius", index) : settings.cornerRadii[index].value);
+  const colorIndex = settings.colorCount === 1 ? 0 : Math.floor(fraction("moduleColor") * settings.colorCount);
+  const geometry = getRegularPolygonGeometry(properties);
+  const value = { geometry, properties, color: colorIndex === 0 ? finder[`${part}MarkerColor`] : settings.extraColors[colorIndex - 1] };
+  finderPolygonCache.set(cacheIndex, { key: cacheKey, value });
+  return value;
+}
+
+function finderPolygonCommand(x, y, markerIndex, part = "outer", scale = 1) {
+  const { geometry } = getFinderPolygon(markerIndex, part);
+  const factor = (part === "outer" ? 7 : 3) * scale;
+  const start = geometry.start.map((value, index) => (index === 0 ? x : y) + value * factor);
+  let previous = geometry.start;
+  return `M${start.map((value) => formatNumber(value, 6)).join(" ")}` + geometry.segments.map((segment) => {
+    const delta = segment.end.map((value, index) => formatNumber((value - previous[index]) * factor, 6)).join(" ");
+    previous = segment.end;
+    if (segment.type === "line") return `l${delta}`;
+    const radius = formatNumber(segment.radius * factor, 6);
+    return `a${radius} ${radius} 0 0 1 ${delta}`;
+  }).join("") + "Z";
+}
+
+function createModuleColorControls(source = elements.moduleColor, container = elements.moduleColorEditors, prefix = "moduleColor", label = "Module") {
   return Array.from({ length: 4 }, (_, index) => {
-    const group = index === 0 ? elements.moduleColor.closest(".color-input-wrap") : elements.moduleColor.closest(".color-input-wrap").cloneNode(true);
+    const group = index === 0 ? source.closest(".color-input-wrap") : source.closest(".color-input-wrap").cloneNode(true);
     const input = group.querySelector('input[type="color"]');
     const hexInput = group.querySelector(".hex-input");
     if (index > 0) {
-      input.id = `moduleColor${index + 1}`;
-      hexInput.id = `moduleColor${index + 1}Value`;
-      input.setAttribute("aria-label", `Module color ${index + 1}`);
-      hexInput.setAttribute("aria-label", `Module hex color ${index + 1} value`);
+      input.id = `${prefix}${index + 1}`;
+      hexInput.id = `${prefix}${index + 1}Value`;
+      input.setAttribute("aria-label", `${label} color ${index + 1}`);
+      hexInput.setAttribute("aria-label", `${label} hex color ${index + 1} value`);
       group.hidden = true;
-      elements.moduleColorEditors.append(group);
+      container.append(group);
     }
     return { group, input, hexInput };
   });
@@ -392,37 +607,39 @@ function getRandomRangeControls(group) {
   };
 }
 
-function createIndividualCornerControls() {
+function createIndividualCornerControls({ prefix = "moduleCorner", container = elements.individualCornerControls, source = elements.moduleCornerRadius, randomSource = moduleRandomControls.get("moduleCornerRadius").group, label: owner = "Module" } = {}) {
   return Array.from({ length: 9 }, (_, index) => {
-    const id = `moduleCorner${index + 1}`;
+    const id = `${prefix}${index + 1}`;
     const field = document.createElement("div");
     field.className = "individual-corner-field";
     field.hidden = true;
     const label = document.createElement("label");
     label.htmlFor = id;
     label.textContent = `c${index + 1}`;
-    const manual = elements.moduleCornerRadius.closest(".range-control").cloneNode(true);
+    const manual = source.closest(".range-control").cloneNode(true);
     manual.id = `${id}Control`;
     const input = manual.querySelector("input");
     input.id = id;
     input.disabled = true;
-    input.setAttribute("aria-label", `Module corner ${index + 1} radius`);
+    input.setAttribute("aria-label", `${owner} corner ${index + 1} radius`);
     const output = manual.querySelector("output");
     output.id = `${id}Value`;
     output.setAttribute("for", id);
-    const randomGroup = moduleRandomControls.get("moduleCornerRadius").group.cloneNode(true);
+    const randomGroup = randomSource.cloneNode(true);
     randomGroup.id = `${id}RandomControl`;
     randomGroup.removeAttribute("data-module-random-range");
-    randomGroup.setAttribute("aria-label", `Random radius for corner ${index + 1}`);
+    randomGroup.removeAttribute("data-outer-random-range");
+    randomGroup.removeAttribute("data-inner-random-range");
+    randomGroup.setAttribute("aria-label", `Random ${owner.toLowerCase()} radius for corner ${index + 1}`);
     const random = getRandomRangeControls(randomGroup);
     for (const bound of ["min", "max"]) {
       random[bound].id = `${id}${bound === "min" ? "Min" : "Max"}`;
       random[bound].disabled = true;
-      random[bound].setAttribute("aria-label", `${bound === "min" ? "Minimum" : "Maximum"} random radius for corner ${index + 1}`);
+      random[bound].setAttribute("aria-label", `${bound === "min" ? "Minimum" : "Maximum"} random ${owner.toLowerCase()} radius for corner ${index + 1}`);
       random[`${bound}Value`].setAttribute("for", random[bound].id);
     }
     field.append(label, manual, randomGroup);
-    elements.individualCornerControls.append(field);
+    container.append(field);
     return { field, label, manual, input, output, random };
   });
 }
@@ -1180,49 +1397,29 @@ function outerMarkerClipCommand(x, y, scale = 1, markerIndex = state.selectedFin
 }
 
 function getMarkerClips(code) {
-  return markerPositions(code).flatMap(([x, y], markerIndex) => (
-    getFinderSettings(markerIndex).markersAsModules || !hasOuterMarkerClip(markerIndex) ? [] : [{
-      id: `outer-marker-cut-${markerIndex}`,
-      d: outerMarkerClipCommand(x, y, 1, markerIndex),
-    }]
-  ));
+  return markerPositions(code).flatMap(([x, y], markerIndex) => {
+    if (getFinderSettings(markerIndex).markersAsModules) return [];
+    const cuts = hasOuterMarkerClip(markerIndex);
+    return [
+      ...(cuts ? [{ id: `outer-marker-cut-${markerIndex}`, d: outerMarkerClipCommand(x, y, 1, markerIndex) }] : []),
+      { id: `outer-marker-shape-${markerIndex}`, d: finderPolygonCommand(x, y, markerIndex), ...(cuts ? { clip: `outer-marker-cut-${markerIndex}` } : {}) },
+    ];
+  });
 }
 
 function getMarkerShape(x, y, markerIndex, part, scale = 1) {
-  const outer = part === "outer";
-  const settings = getFinderSettings(markerIndex);
-  const style = settings[`${part}MarkerStyle`];
-  const color = settings[`${part}MarkerColor`];
-  const inset = (outer ? .5 : 2) * scale;
-  const size = (outer ? 6 : 3) * scale;
-  const radius = (outer ? 1.25 : .8) * scale;
-  const attributes = outer
-    ? {
-      fill: "none", stroke: color, "stroke-width": scale,
-      ...(hasOuterMarkerClip(markerIndex) ? { "clip-path": `url(#outer-marker-cut-${markerIndex})` } : {}),
-    }
-    : { fill: color };
-
-  if (style === "circle") {
-    return { tag: "circle", attributes: { ...attributes, cx: x + 3.5 * scale, cy: y + 3.5 * scale, r: size / 2 } };
+  const { properties, color } = getFinderPolygon(markerIndex, part);
+  if (part === "outer") {
+    return { tag: "path", attributes: {
+      d: finderPolygonCommand(x, y, markerIndex, part, scale), fill: "none", stroke: color,
+      "stroke-width": 2 * properties.moduleScale / 100 * scale,
+      "stroke-linejoin": "miter", "stroke-miterlimit": 10,
+      "clip-path": `url(#outer-marker-shape-${markerIndex})`,
+    } };
   }
-  if (["outer-rounded", "inner-rounded"].includes(style)) {
-    return {
-      tag: "path",
-      attributes: { ...attributes, d: cornerRoundedRectCommand(x + inset, y + inset, size, radius, markerIndex, style === "inner-rounded") },
-    };
-  }
-  if (["opposite-inward-rounded", "opposite-outward-rounded"].includes(style)) {
-    const reverse = (markerIndex !== 0) !== (style === "opposite-outward-rounded");
-    return {
-      tag: "path",
-      attributes: { ...attributes, d: oppositeCornersRectCommand(x + inset, y + inset, size, radius, reverse) },
-    };
-  }
-  return {
-    tag: "rect",
-    attributes: { ...attributes, x: x + inset, y: y + inset, width: size, height: size, rx: style === "rounded" ? radius : 0 },
-  };
+  return { tag: "path", attributes: {
+    d: finderPolygonCommand(x + 2 * scale, y + 2 * scale, markerIndex, part, scale), fill: color,
+  } };
 }
 
 function setAttributes(node, attributes) {
@@ -1277,11 +1474,11 @@ function appendSvgMarkers(svg, code) {
   const clips = getMarkerClips(code);
   if (clips.length) {
     const definitions = document.createElementNS(SVG_NAMESPACE, "defs");
-    clips.forEach(({ id, d }) => {
+    clips.forEach(({ id, d, clip: cutClip }) => {
       const clip = setAttributes(document.createElementNS(SVG_NAMESPACE, "clipPath"), {
         id, clipPathUnits: "userSpaceOnUse",
       });
-      clip.append(setAttributes(document.createElementNS(SVG_NAMESPACE, "path"), { d }));
+      clip.append(setAttributes(document.createElementNS(SVG_NAMESPACE, "path"), { d, ...(cutClip ? { "clip-path": `url(#${cutClip})` } : {}) }));
       definitions.append(clip);
     });
     svg.append(definitions);
@@ -1544,6 +1741,8 @@ function render() {
   }
   elements.cutOuterMarkerCorners.checked = finderSettings.cutOuterMarkerCorners;
   elements.outerMarkerCornersOnly.checked = finderSettings.outerMarkerCornersOnly;
+  syncFinderPolygonControls("outer");
+  syncFinderPolygonControls("inner");
   elements.moduleColorCount.value = state.moduleColorCount;
   elements.moduleColorCount.setAttribute("aria-valuetext", `${state.moduleColorCount} ${state.moduleColorCount === 1 ? "color" : "colors"}`);
   elements.moduleColorCountValue.textContent = String(state.moduleColorCount);
@@ -1591,7 +1790,7 @@ function render() {
   elements.moduleSizeCount.value = state.moduleSizeCount;
   elements.moduleSizeCount.setAttribute("aria-valuetext", `${state.moduleSizeCount} sizes`);
   elements.moduleSizeCountValue.textContent = String(state.moduleSizeCount);
-  elements.moduleSeedField.hidden = !hasRandomModuleProperties() && state.moduleColorCount === 1;
+  elements.moduleSeedField.hidden = !hasRandomModuleProperties() && state.moduleColorCount === 1 && !hasRandomFinderProperties();
   elements.moduleSeed.value = state.moduleSeed;
   elements.moduleSeedValue.textContent = String(state.moduleSeed);
   elements.moduleMergeOptions.forEach((button) => {
@@ -1879,7 +2078,7 @@ document.addEventListener("visibilitychange", () => {
 elements.editAllFinderPatterns.addEventListener("click", () => {
   if (!state.editFindersIndividually && !state.finderPatterns) {
     state.finderPatterns = Array.from({ length: 3 }, () => (
-      Object.fromEntries(FINDER_PROPERTIES.map((key) => [key, state[key]]))
+      structuredClone(Object.fromEntries(FINDER_PROPERTIES.map((key) => [key, state[key]])))
     ));
   }
   state.editFindersIndividually = !state.editFindersIndividually;
@@ -1965,10 +2164,10 @@ elements.moduleFigureOptions.forEach((button) => {
   });
 });
 
-function bindRandomRangeControls(controls, key, cornerIndex = null) {
+function bindRandomRangeControls(controls, key, cornerIndex = null, { getRange = () => getModuleRandomRange(key, cornerIndex), setBound = (bound, value) => setRandomModuleBound(key, bound, value, cornerIndex) } = {}) {
   for (const bound of ["min", "max"]) {
     controls[bound].addEventListener("input", () => {
-      setRandomModuleBound(key, bound, Number(controls[bound].value), cornerIndex);
+      setBound(bound, Number(controls[bound].value));
     });
   }
 
@@ -1984,17 +2183,17 @@ function bindRandomRangeControls(controls, key, cornerIndex = null) {
   controls.track.addEventListener("pointerdown", (event) => {
     if (!event.isPrimary || event.button !== 0 || event.target.matches("input")) return;
     const value = valueAtPointer(event);
-    const range = getModuleRandomRange(key, cornerIndex);
+    const range = getRange();
     const bound = value < (range.min + range.max) / 2 ? "min" : "max";
     event.preventDefault();
     railPointer = { id: event.pointerId, bound };
     controls[bound].focus({ preventScroll: true });
     controls.track.setPointerCapture(event.pointerId);
-    setRandomModuleBound(key, bound, value, cornerIndex);
+    setBound(bound, value);
   });
   controls.track.addEventListener("pointermove", (event) => {
     if (railPointer?.id !== event.pointerId) return;
-    setRandomModuleBound(key, railPointer.bound, valueAtPointer(event), cornerIndex);
+    setBound(railPointer.bound, valueAtPointer(event));
   });
   const endRailPointer = (event) => {
     if (railPointer?.id !== event.pointerId) return;
@@ -2144,6 +2343,14 @@ moduleColorControls.slice(1).forEach((controls, index) => {
     render();
   });
 });
+Object.entries(finderPolygonControls).forEach(([part, editor]) => {
+  editor.colors.slice(1).forEach((controls, index) => {
+    bindColorEditor(controls.input, controls.hexInput, () => getFinderSettings()[`${part}Polygon`].extraColors[index], (value) => {
+      getFinderSettings()[`${part}Polygon`].extraColors[index] = value.toLowerCase();
+      render();
+    });
+  });
+});
 
 function buildSvg(code, size) {
   const dimension = code.getModuleCount() + QUIET_ZONE * 2;
@@ -2167,8 +2374,8 @@ function buildSvg(code, size) {
       return `<${tag} ${data}/>`;
     }).join("");
   }).join("");
-  const clipData = getMarkerClips(code).map(({ id, d }) => (
-    `<clipPath id="${id}" clipPathUnits="userSpaceOnUse"><path d="${d}"/></clipPath>`
+  const clipData = getMarkerClips(code).map(({ id, d, clip }) => (
+    `<clipPath id="${id}" clipPathUnits="userSpaceOnUse"><path d="${d}"${clip ? ` clip-path="url(#${clip})"` : ""}/></clipPath>`
   )).join("");
   const definitions = clipData ? `<defs>${clipData}</defs>` : "";
   const rendering = getShapeRendering();
@@ -2290,7 +2497,13 @@ function drawCanvasMarkers(context, code, moduleSize, offset, quietZone) {
       const { tag, attributes } = getMarkerShape(x, y, markerIndex, part, moduleSize);
       const draw = part === "outer" ? "stroke" : "fill";
       context.save();
-      if (part === "outer") context.strokeStyle = attributes.stroke;
+      if (part === "outer") {
+        context.strokeStyle = attributes.stroke;
+        context.lineWidth = attributes["stroke-width"];
+        context.lineJoin = attributes["stroke-linejoin"];
+        context.miterLimit = attributes["stroke-miterlimit"];
+        context.clip(new Path2D(attributes.d));
+      }
       else context.fillStyle = attributes.fill;
       if (part === "outer" && hasOuterMarkerClip(markerIndex)) {
         context.clip(new Path2D(outerMarkerClipCommand(x, y, moduleSize, markerIndex)));

@@ -329,6 +329,7 @@ select:focus-visible {
 .style-controls > .marker-mode-toggle { margin-top: 0; }
 
 .style-property { margin-top: 16px; margin-inline-start: 16px; }
+.finder-polygon-properties { display: grid; gap: 16px; margin-top: 16px; margin-inline-start: 16px; }
 
 .property-heading {
   display: flex;
