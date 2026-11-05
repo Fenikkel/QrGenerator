@@ -7,10 +7,10 @@
     <meta name="description" content="QR code generator with SVG and PNG export.">
     <title>QR Generator</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=20261105-14">
+    <link rel="stylesheet" href="styles.css?v=20261105-15">
     <script src="vendor/qrcode.js?v=20261105-1" defer></script>
     <script src="logo-area.js?v=20261105-1" defer></script>
-    <script src="script.js?v=20261105-23" defer></script>
+    <script src="script.js?v=20261105-25" defer></script>
   </head>
   <body>
     <main>
@@ -284,6 +284,63 @@
                   </div>
                 </div>
 
+              </div>
+            </div>
+          </section>
+
+          <section class="alignment-patterns-section" aria-labelledby="alignmentPatternsTitle" hidden>
+            <div class="alignment-pattern-heading">
+              <h2 id="alignmentPatternsTitle" class="section-title">Alignment Patterns</h2>
+              <button id="alignmentAsModules" type="button" class="shuffle-button" aria-label="Alignment patterns as modules" title="Alignment patterns as modules" aria-pressed="true" aria-expanded="false" aria-controls="alignmentProperties">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
+              </button>
+              <button type="button" class="shuffle-button section-reset" data-reset-section="alignments" aria-label="Reset Alignment Patterns" title="Reset Alignment Patterns"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/></svg></button>
+            </div>
+            <div id="alignmentProperties" class="controls" hidden>
+              <div class="style-controls">
+                <div class="style-group">
+                  <div class="marker-part-heading"><label for="alignmentOuterStyle">Outer</label></div>
+                  <select id="alignmentOuterStyle" aria-label="Alignment outer style">
+                    <option value="regular-polygon" selected>Regular polygon</option>
+                    <option value="figure">Figures</option>
+                  </select>
+                  <div id="alignmentOuterPolygonProperties" class="finder-polygon-properties"></div>
+                  <div class="range-field style-property">
+                    <div class="property-heading"><label for="alignmentOuterColorCount">Color</label></div>
+                    <span class="range-control">
+                      <input id="alignmentOuterColorCount" type="range" min="1" max="4" step="1" value="1" aria-label="Number of alignment outer colors">
+                      <output id="alignmentOuterColorCountValue" for="alignmentOuterColorCount">1</output>
+                    </span>
+                    <div id="alignmentOuterColorEditors" class="module-color-editors" role="group" aria-label="Alignment outer colors">
+                      <span class="color-input-wrap">
+                        <input id="alignmentOuterColor" type="color" value="#202020" aria-label="Alignment outer color 1">
+                        <input id="alignmentOuterColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Alignment outer hex color 1 value">
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="style-group">
+                  <div class="marker-part-heading"><label for="alignmentInnerStyle">Inner</label></div>
+                  <select id="alignmentInnerStyle" aria-label="Alignment inner style">
+                    <option value="regular-polygon" selected>Regular polygon</option>
+                    <option value="figure">Figures</option>
+                  </select>
+                  <div id="alignmentInnerPolygonProperties" class="finder-polygon-properties"></div>
+                  <div class="range-field style-property">
+                    <div class="property-heading"><label for="alignmentInnerColorCount">Color</label></div>
+                    <span class="range-control">
+                      <input id="alignmentInnerColorCount" type="range" min="1" max="4" step="1" value="1" aria-label="Number of alignment inner colors">
+                      <output id="alignmentInnerColorCountValue" for="alignmentInnerColorCount">1</output>
+                    </span>
+                    <div id="alignmentInnerColorEditors" class="module-color-editors" role="group" aria-label="Alignment inner colors">
+                      <span class="color-input-wrap">
+                        <input id="alignmentInnerColor" type="color" value="#202020" aria-label="Alignment inner color 1">
+                        <input id="alignmentInnerColorValue" class="hex-input" type="text" value="#202020" maxlength="7" spellcheck="false" aria-label="Alignment inner hex color 1 value">
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </section>

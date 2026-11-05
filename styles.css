@@ -182,6 +182,8 @@ select:focus-visible {
 .section-title { margin: 0 0 8px; font-size: .82rem; font-weight: 600; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .section-heading .section-title { margin: 0; }
+.alignment-pattern-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 8px; }
+.alignment-pattern-heading .section-title { margin: 0; }
 .shuffle-button.section-reset { margin-inline-start: auto; flex: 0 0 32px; color: var(--muted); }
 .module-style-field {
   display: grid;

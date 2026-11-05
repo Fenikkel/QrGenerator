@@ -36,6 +36,8 @@ const state = {
   finderPatterns: null,
   outerPolygon: createFinderPolygonSettings(),
   innerPolygon: createFinderPolygonSettings(),
+  alignmentAsModules: true,
+  alignment: createAlignmentSettings(),
   individualCorners: false,
   cornerRadii: null,
   rotationQuarterTurns: false,
@@ -107,6 +109,9 @@ const elements = {
   moduleMergeOptions: document.querySelectorAll("[data-module-merge]"),
   moduleMergeField: document.querySelector(".module-merge-field"),
   finderModulesOptions: document.querySelectorAll("[data-finder-modules]"),
+  alignmentAsModules: document.querySelector("#alignmentAsModules"),
+  alignmentProperties: document.querySelector("#alignmentProperties"),
+  alignmentSection: document.querySelector(".alignment-patterns-section"),
   outerMarkerProperties: document.querySelector("#outerMarkerProperties"),
   innerMarkerProperties: document.querySelector("#innerMarkerProperties"),
   editAllFinderPatterns: document.querySelector("#editAllFinderPatterns"),
@@ -177,6 +182,8 @@ const MODULE_RANDOM_PROPERTIES = {
   moduleRotation: { min: 0, max: 360, salt: 0xdeadbeef },
   moduleColor: { salt: 0xa4093822 },
   moduleFigure: { salt: 0x082efa98 },
+  alignmentOuterColor: { salt: 0x452821e6 },
+  alignmentInnerColor: { salt: 0x38d01377 },
 };
 const moduleRandomControls = new Map(Array.from(elements.moduleRandomRanges, (group) => [group.dataset.moduleRandomRange, getRandomRangeControls(group)]));
 const individualCornerControls = createIndividualCornerControls();
@@ -184,7 +191,10 @@ const moduleColorControls = createModuleColorControls();
 const outerPolygonControls = createFinderPolygonControls("outer");
 const innerPolygonControls = createFinderPolygonControls("inner");
 const finderPolygonControls = { outer: outerPolygonControls, inner: innerPolygonControls };
+const alignmentControls = Object.fromEntries(["outer", "inner"].map((part) => [part, createAlignmentControls(part)]));
 const finderPolygonCache = new Map();
+const alignmentPolygonCache = new Map();
+const alignmentPositionsCache = new Map();
 const QR_STRUCTURE_REGIONS = [
   { id: "finder", label: "Finder patterns", color: "#EF4444" },
   { id: "separators", label: "Separators", color: "#10B981" },
@@ -369,11 +379,23 @@ function createFinderPolygonSettings() {
   };
 }
 
-function createFinderPolygonControls(part) {
-  const container = document.querySelector(`#${part}PolygonProperties`);
-  const owner = `${part === "outer" ? "Outer" : "Inner"} marker`;
+function createAlignmentSettings() {
+  return {
+    outerMarkerStyle: "regular-polygon", innerMarkerStyle: "regular-polygon",
+    outerPolygon: createFinderPolygonSettings(), innerPolygon: createFinderPolygonSettings(),
+    outerColorCount: 1, innerColorCount: 1,
+    outerColors: Array(4).fill("#202020"), innerColors: Array(4).fill("#202020"),
+  };
+}
+
+function createFinderPolygonControls(part, {
+  prefix = part,
+  container = document.querySelector(`#${part}PolygonProperties`),
+  owner = `${part === "outer" ? "Outer" : "Inner"} marker`,
+  getSettings = () => getFinderSettings()[`${part}Polygon`],
+} = {}) {
   const controls = {};
-  const controlId = (id) => `${part}${id[0].toUpperCase()}${id.slice(1)}`;
+  const controlId = (id) => `${prefix}${id[0].toUpperCase()}${id.slice(1)}`;
   controls.figureField = document.createElement("div");
   controls.figureField.className = "range-field";
   controls.figureField.setAttribute("role", "group");
@@ -387,7 +409,7 @@ function createFinderPolygonControls(part) {
     button.dataset.finderFigure = figure;
     button.setAttribute("aria-label", `${owner}: ${button.getAttribute("aria-label")}`);
     button.addEventListener("click", () => {
-      const settings = getFinderSettings()[`${part}Polygon`];
+      const settings = getSettings();
       if (settings.moduleFigure === figure) return;
       settings.moduleFigure = figure;
       render();
@@ -414,11 +436,11 @@ function createFinderPolygonControls(part) {
     field.append(heading, manual);
     container.append(field);
     controls[key] = { field, input, output, manual, label };
-    input.addEventListener("input", () => { getFinderSettings()[`${part}Polygon`][key] = Number(input.value); render(); });
+    input.addEventListener("input", () => { getSettings()[key] = Number(input.value); render(); });
     if (key === "moduleCornerRadius") {
       controls.individual = elements.individualCornersToggle.cloneNode(true);
       controls.individual.id = controlId("individualCornersToggle");
-      controls.individual.setAttribute("aria-label", `Edit ${part} corners individually`);
+      controls.individual.setAttribute("aria-label", `Edit ${owner.toLowerCase()} corners individually`);
       controls.individual.setAttribute("aria-controls", controlId("individualCornerControls"));
       heading.append(controls.individual);
       controls.cornerContainer = document.createElement("div");
@@ -428,12 +450,12 @@ function createFinderPolygonControls(part) {
       controls.cornerContainer.setAttribute("aria-label", `${owner} individual corner radii`);
       controls.cornerContainer.hidden = true;
       field.append(controls.cornerContainer);
-      controls.corners = createIndividualCornerControls({ prefix: `${part}Corner`, container: controls.cornerContainer, source: input, randomSource: null, label: owner });
+      controls.corners = createIndividualCornerControls({ prefix: `${prefix}Corner`, container: controls.cornerContainer, source: input, randomSource: null, label: owner });
       controls.corners.forEach((corner, index) => {
-        corner.input.addEventListener("input", () => { getFinderSettings()[`${part}Polygon`].cornerRadii[index].value = Number(corner.input.value); render(); });
+        corner.input.addEventListener("input", () => { getSettings().cornerRadii[index].value = Number(corner.input.value); render(); });
       });
       controls.individual.addEventListener("click", () => {
-        const settings = getFinderSettings()[`${part}Polygon`];
+        const settings = getSettings();
         settings.cornerRadii ||= Array.from({ length: 9 }, () => ({ value: settings.moduleCornerRadius }));
         settings.individualCorners = !settings.individualCorners;
         render();
@@ -443,10 +465,8 @@ function createFinderPolygonControls(part) {
   return controls;
 }
 
-function syncFinderPolygonControls(part) {
-  const finder = getFinderSettings();
+function syncFinderPolygonControls(part, finder = getFinderSettings(), editor = finderPolygonControls[part]) {
   const settings = finder[`${part}Polygon`];
-  const editor = finderPolygonControls[part];
   const figure = finder[`${part}MarkerStyle`] === "figure";
   editor.figureField.hidden = !figure;
   editor.figures.forEach((button) => {
@@ -474,17 +494,81 @@ function syncFinderPolygonControls(part) {
   });
 }
 
-function getFinderPolygon(markerIndex, part = "outer") {
-  const finder = getFinderSettings(markerIndex);
-  const settings = finder[`${part}Polygon`];
-  const figure = finder[`${part}MarkerStyle`] === "figure";
-  const cacheIndex = `${part}:${markerIndex}`;
-  const cacheKey = JSON.stringify([finder[`${part}MarkerStyle`], settings, finder[`${part}MarkerColor`]]);
-  if (finderPolygonCache.get(cacheIndex)?.key === cacheKey) return finderPolygonCache.get(cacheIndex).value;
+function createAlignmentControls(part) {
+  const title = part === "outer" ? "Outer" : "Inner";
+  const prefix = `alignment${title}`;
+  const polygon = createFinderPolygonControls(part, {
+    prefix,
+    owner: `Alignment ${part}`,
+    container: document.querySelector(`#${prefix}PolygonProperties`),
+    getSettings: () => state.alignment[`${part}Polygon`],
+  });
+  const style = document.querySelector(`#${prefix}Style`);
+  style.addEventListener("change", () => {
+    state.alignment[`${part}MarkerStyle`] = style.value;
+    render();
+  });
+  const count = document.querySelector(`#${prefix}ColorCount`);
+  const output = document.querySelector(`#${prefix}ColorCountValue`);
+  count.addEventListener("input", () => {
+    state.alignment[`${part}ColorCount`] = Number(count.value);
+    render();
+  });
+  const colors = createModuleColorControls(
+    document.querySelector(`#${prefix}Color`), document.querySelector(`#${prefix}ColorEditors`),
+    `${prefix}Color`, `Alignment ${part}`,
+  );
+  colors.forEach((control, index) => {
+    bindColorEditor(control.input, control.hexInput,
+      () => state.alignment[`${part}Colors`][index],
+      (value) => { state.alignment[`${part}Colors`][index] = value.toLowerCase(); render(); });
+  });
+  return { polygon, style, count, output, colors };
+}
+
+function syncAlignmentControls() {
+  const version = state.qr ? (state.qr.getModuleCount() - 17) / 4 : 0;
+  elements.alignmentSection.hidden = version < 2;
+  elements.alignmentAsModules.setAttribute("aria-pressed", String(state.alignmentAsModules));
+  elements.alignmentAsModules.setAttribute("aria-expanded", String(!state.alignmentAsModules));
+  elements.alignmentProperties.hidden = state.alignmentAsModules;
+  for (const part of ["outer", "inner"]) {
+    const controls = alignmentControls[part];
+    syncFinderPolygonControls(part, state.alignment, controls.polygon);
+    controls.style.value = state.alignment[`${part}MarkerStyle`];
+    const count = getAlignmentColorCount(part, state.qr);
+    controls.count.closest(".range-control").hidden = version < 7;
+    controls.count.disabled = version < 7;
+    controls.count.closest(".range-field").querySelector("label").htmlFor = version < 7 ? controls.colors[0].input.id : controls.count.id;
+    controls.count.value = count;
+    controls.count.setAttribute("aria-valuetext", `${count} ${count === 1 ? "color" : "colors"}`);
+    controls.output.textContent = count;
+    controls.colors.forEach((control, index) => {
+      control.group.hidden = index >= count;
+      control.input.disabled = control.hexInput.disabled = index >= count;
+      control.input.value = state.alignment[`${part}Colors`][index];
+      control.hexInput.value = state.alignment[`${part}Colors`][index].toUpperCase();
+    });
+  }
+  const randomAlignmentColors = !state.alignmentAsModules && ["outer", "inner"].some((part) => getAlignmentColorCount(part, state.qr) > 1);
+  elements.moduleSeedField.hidden = !hasRandomModuleProperties() && state.moduleColorCount === 1 && !randomAlignmentColors;
+}
+
+function getPatternPolygon(style, settings) {
+  const figure = style === "figure";
   const properties = Object.fromEntries(MODULE_RANGE_PROPERTIES.map(([key]) => [key, settings[key]]));
   properties.moduleFigure = settings.moduleFigure;
   if (!figure && settings.individualCorners) properties.moduleCornerRadii = settings.cornerRadii.slice(0, settings.moduleSides).map((corner) => corner.value);
-  const value = { geometry: figure ? getFigureGeometry(properties) : getRegularPolygonGeometry(properties), properties, color: finder[`${part}MarkerColor`] };
+  return { geometry: figure ? getFigureGeometry(properties) : getRegularPolygonGeometry(properties), properties };
+}
+
+function getFinderPolygon(markerIndex, part = "outer") {
+  const finder = getFinderSettings(markerIndex);
+  const settings = finder[`${part}Polygon`];
+  const cacheIndex = `${part}:${markerIndex}`;
+  const cacheKey = JSON.stringify([finder[`${part}MarkerStyle`], settings, finder[`${part}MarkerColor`]]);
+  if (finderPolygonCache.get(cacheIndex)?.key === cacheKey) return finderPolygonCache.get(cacheIndex).value;
+  const value = { ...getPatternPolygon(finder[`${part}MarkerStyle`], settings), color: finder[`${part}MarkerColor`] };
   finderPolygonCache.set(cacheIndex, { key: cacheKey, value });
   return value;
 }
@@ -492,6 +576,10 @@ function getFinderPolygon(markerIndex, part = "outer") {
 function finderPolygonCommand(x, y, markerIndex, part = "outer", scale = 1) {
   const { geometry } = getFinderPolygon(markerIndex, part);
   const factor = (part === "outer" ? 7 : 3) * scale;
+  return scaledPolygonCommand(geometry, x, y, factor);
+}
+
+function scaledPolygonCommand(geometry, x, y, factor) {
   const start = geometry.start.map((value, index) => (index === 0 ? x : y) + value * factor);
   let previous = geometry.start;
   return `M${start.map((value) => formatNumber(value, 6)).join(" ")}` + geometry.segments.map((segment) => {
@@ -1220,6 +1308,7 @@ function shouldRenderModule(code, row, column, quietZone, exclusionBox, style = 
   const part = getFinderModulePart(row, column, count, markerIndex);
   return code.isDark(row, column)
     && (part === null || getFinderSettings(markerIndex)[`${part}AsModules`])
+    && (state.alignmentAsModules || code.getSymbolLayout().functionModules[row * count + column] !== 2)
     && !moduleIntersectsBox(row, column, quietZone, exclusionBox, style);
 }
 
@@ -1344,7 +1433,7 @@ function getShapeRendering() {
     return ["outer", "inner"].every((part) => settings[`${part}AsModules`]
       || (settings[`${part}MarkerStyle`] === "square" && (part === "inner" || !hasOuterMarkerClip(markerIndex))));
   });
-  return state.moduleStyle === "square" && squareMarkers ? "crispEdges" : "geometricPrecision";
+  return state.moduleStyle === "square" && squareMarkers && state.alignmentAsModules ? "crispEdges" : "geometricPrecision";
 }
 
 function outerMarkerClipCommand(x, y, scale = 1, markerIndex = state.selectedFinderPattern) {
@@ -1503,6 +1592,87 @@ function getAlignmentPatternPositions(version) {
   return positions;
 }
 
+function getAlignmentPatterns(code) {
+  const count = code.getModuleCount();
+  if (alignmentPositionsCache.has(count)) return alignmentPositionsCache.get(count);
+  const positions = getAlignmentPatternPositions((count - 17) / 4);
+  const patterns = [];
+  for (const row of positions) {
+    for (const column of positions) {
+      if ((row === 6 && (column === 6 || column === count - 7)) || (row === count - 7 && column === 6)) continue;
+      patterns.push({ row, column, index: patterns.length });
+    }
+  }
+  alignmentPositionsCache.set(count, patterns);
+  return patterns;
+}
+
+function getAlignmentColorCount(part, code) {
+  return code && code.getModuleCount() >= 45 ? state.alignment[`${part}ColorCount`] : 1;
+}
+
+function getAlignmentArtwork(code, quietZone = QUIET_ZONE) {
+  const artwork = { clips: [], shapes: [], clearClip: null };
+  if (state.alignmentAsModules) return artwork;
+  const patterns = getAlignmentPatterns(code);
+  if (!patterns.length) return artwork;
+  const polygons = Object.fromEntries(["outer", "inner"].map((part) => {
+    const style = state.alignment[`${part}MarkerStyle`];
+    const settings = state.alignment[`${part}Polygon`];
+    const key = JSON.stringify([style, settings]);
+    if (alignmentPolygonCache.get(part)?.key !== key) {
+      alignmentPolygonCache.set(part, { key, value: getPatternPolygon(style, settings) });
+    }
+    return [part, alignmentPolygonCache.get(part).value];
+  }));
+  for (const pattern of patterns) {
+    for (const part of ["outer", "inner"]) {
+      const { geometry, properties } = polygons[part];
+      const title = part === "outer" ? "Outer" : "Inner";
+      const count = getAlignmentColorCount(part, code);
+      const colorIndex = count === 1 ? 0 : Math.floor(randomModuleFraction(`alignment${title}Color`, pattern.row, pattern.column) * count);
+      const color = state.alignment[`${part}Colors`][colorIndex];
+      const inset = part === "outer" ? 2 : 0;
+      const d = scaledPolygonCommand(geometry, quietZone + pattern.column - inset, quietZone + pattern.row - inset, part === "outer" ? 5 : 1);
+      const attributes = { d, "data-alignment-pattern": pattern.index, "data-part": part };
+      if (part === "outer") {
+        const id = `alignment-outer-shape-${pattern.index}`;
+        artwork.clips.push({ id, d });
+        Object.assign(attributes, {
+          fill: "none", stroke: color, "stroke-width": 2 * properties.moduleScale / 100,
+          "stroke-linejoin": "miter", "stroke-miterlimit": 10, "clip-path": `url(#${id})`,
+        });
+      } else attributes.fill = color;
+      artwork.shapes.push(attributes);
+    }
+  }
+  if (state.clearLogoArea) {
+    const box = getLogoBox(code, quietZone);
+    const dimension = code.getModuleCount() + quietZone * 2;
+    const d = `M0 0h${dimension}v${dimension}H0Z` +
+      `M${formatNumber(box.x, 6)} ${formatNumber(box.y, 6)}h${formatNumber(box.width, 6)}v${formatNumber(box.height, 6)}h-${formatNumber(box.width, 6)}Z`;
+    artwork.clearClip = "alignment-logo-clear";
+    artwork.clips.push({ id: artwork.clearClip, d, "clip-rule": "evenodd" });
+  }
+  return artwork;
+}
+
+function appendSvgAlignmentPatterns(svg, code) {
+  const artwork = getAlignmentArtwork(code);
+  if (!artwork.shapes.length) return;
+  const definitions = document.createElementNS(SVG_NAMESPACE, "defs");
+  artwork.clips.forEach(({ id, ...attributes }) => {
+    const clip = setAttributes(document.createElementNS(SVG_NAMESPACE, "clipPath"), { id, clipPathUnits: "userSpaceOnUse" });
+    clip.append(setAttributes(document.createElementNS(SVG_NAMESPACE, "path"), attributes));
+    definitions.append(clip);
+  });
+  const layer = setAttributes(document.createElementNS(SVG_NAMESPACE, "g"), {
+    class: "alignment-patterns", ...(artwork.clearClip ? { "clip-path": `url(#${artwork.clearClip})` } : {}),
+  });
+  artwork.shapes.forEach((attributes) => layer.append(setAttributes(document.createElementNS(SVG_NAMESPACE, "path"), attributes)));
+  svg.append(definitions, layer);
+}
+
 function getQrStructure(code, quietZone = QUIET_ZONE) {
   const count = code.getModuleCount();
   const version = (count - 17) / 4;
@@ -1533,13 +1703,9 @@ function getQrStructure(code, quietZone = QUIET_ZONE) {
     }
   }
 
-  const positions = getAlignmentPatternPositions(version);
-  for (const row of positions) {
-    for (const column of positions) {
-      if (cells[at(row, column)]) continue;
-      for (let dy = -2; dy <= 2; dy += 1) {
-        for (let dx = -2; dx <= 2; dx += 1) mark(row + dy, column + dx, types.alignment);
-      }
+  for (const { row, column } of getAlignmentPatterns(code)) {
+    for (let dy = -2; dy <= 2; dy += 1) {
+      for (let dx = -2; dx <= 2; dx += 1) mark(row + dy, column + dx, types.alignment);
     }
   }
 
@@ -1691,6 +1857,7 @@ function clearPreview() {
   elements.preview.replaceChildren();
   elements.preview.removeAttribute("viewBox");
   elements.preview.removeAttribute("shape-rendering");
+  syncAlignmentControls();
   updateStressTestPreview();
 }
 
@@ -1715,6 +1882,9 @@ function resetSection(section) {
     Object.assign(state, structuredClone(sectionDefaults.finders), {
       editFindersIndividually: false, selectedFinderPattern: 0, finderPatterns: null,
     });
+  } else if (section === "alignments") {
+    state.alignmentAsModules = true;
+    state.alignment = createAlignmentSettings();
   } else if (section === "logo") {
     clearLogo(false);
     state.logoSize = defaults.logoSize;
@@ -1814,7 +1984,6 @@ function render() {
   elements.moduleSizeCount.value = state.moduleSizeCount;
   elements.moduleSizeCount.setAttribute("aria-valuetext", `${state.moduleSizeCount} sizes`);
   elements.moduleSizeCountValue.textContent = String(state.moduleSizeCount);
-  elements.moduleSeedField.hidden = !hasRandomModuleProperties() && state.moduleColorCount === 1;
   elements.moduleSeed.value = state.moduleSeed;
   elements.moduleSeedValue.textContent = String(state.moduleSeed);
   elements.moduleMergeOptions.forEach((button) => {
@@ -1854,6 +2023,7 @@ function render() {
   }
 
   syncLogoSize(state.qr);
+  syncAlignmentControls();
   setValidation();
   updateVersionInfo(state.qr, trimmedValue, qrMode);
   const dimension = state.qr.getModuleCount() + QUIET_ZONE * 2;
@@ -1861,6 +2031,7 @@ function render() {
   elements.preview.replaceChildren();
   appendSvgModules(elements.preview, state.qr);
   appendSvgMarkers(elements.preview, state.qr);
+  appendSvgAlignmentPatterns(elements.preview, state.qr);
   appendSvgLogo(elements.preview, state.qr);
   appendSvgQrStructureGuide(elements.preview, state.qr);
   updateStressTestPreview();
@@ -2132,6 +2303,11 @@ elements.finderModulesOptions.forEach((button) => {
   });
 });
 
+elements.alignmentAsModules.addEventListener("click", () => {
+  state.alignmentAsModules = !state.alignmentAsModules;
+  render();
+});
+
 MODULE_RANGE_PROPERTIES.forEach(([key]) => {
   elements[key].addEventListener("input", () => {
     state[key] = Number(elements[key].value);
@@ -2197,7 +2373,7 @@ elements.moduleFigureOptions.forEach((button) => {
   });
 });
 
-Object.values(finderPolygonControls).forEach((editor) => {
+[...Object.values(finderPolygonControls), ...Object.values(alignmentControls).map((controls) => controls.polygon)].forEach((editor) => {
   editor.figures.forEach((button) => {
     const geometry = getFigureGeometry({ moduleFigure: button.dataset.finderFigure, moduleScale: 80, moduleRotation: 0 });
     button.querySelector("path").setAttribute("d", regularPolygonCommand(0, 0, geometry));
@@ -2422,13 +2598,19 @@ function buildSvg(code, size) {
     `<clipPath id="${id}" clipPathUnits="userSpaceOnUse"><path d="${d}"${clip ? ` clip-path="url(#${clip})"` : ""}/></clipPath>`
   )).join("");
   const definitions = clipData ? `<defs>${clipData}</defs>` : "";
+  let alignmentData = "";
+  if (!state.alignmentAsModules) {
+    const alignmentSvg = document.createElementNS(SVG_NAMESPACE, "svg");
+    appendSvgAlignmentPatterns(alignmentSvg, code);
+    alignmentData = alignmentSvg.innerHTML;
+  }
   const rendering = getShapeRendering();
   let logoData = "";
   if (state.logoDataUrl) {
     const box = getLogoBox(code);
     logoData = `<image x="${formatNumber(box.x, 6)}" y="${formatNumber(box.y, 6)}" width="${formatNumber(box.width, 6)}" height="${formatNumber(box.height, 6)}" href="${state.logoDataUrl}" preserveAspectRatio="xMidYMid meet"/>`;
   }
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${dimension} ${dimension}" shape-rendering="${rendering}">${definitions}${moduleData}${markerData}${logoData}</svg>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${dimension} ${dimension}" shape-rendering="${rendering}">${definitions}${moduleData}${markerData}${alignmentData}${logoData}</svg>\n`;
 }
 
 function addRoundedRectPath(context, x, y, width, height, radius) {
@@ -2570,6 +2752,34 @@ function drawCanvasMarkers(context, code, moduleSize, offset, quietZone) {
   });
 }
 
+function drawCanvasAlignmentPatterns(context, code, moduleSize, offset, quietZone) {
+  const artwork = getAlignmentArtwork(code, quietZone);
+  if (!artwork.shapes.length) return;
+  context.save();
+  context.translate(offset, offset);
+  context.scale(moduleSize, moduleSize);
+  if (artwork.clearClip) {
+    context.clip(new Path2D(artwork.clips.find((clip) => clip.id === artwork.clearClip).d), "evenodd");
+  }
+  artwork.shapes.forEach((attributes) => {
+    context.save();
+    const path = new Path2D(attributes.d);
+    if (attributes.stroke) {
+      context.clip(path);
+      context.strokeStyle = attributes.stroke;
+      context.lineWidth = attributes["stroke-width"];
+      context.lineJoin = attributes["stroke-linejoin"];
+      context.miterLimit = attributes["stroke-miterlimit"];
+      context.stroke(path);
+    } else {
+      context.fillStyle = attributes.fill;
+      context.fill(path);
+    }
+    context.restore();
+  });
+  context.restore();
+}
+
 function drawCanvasModulePalette(context, palette, moduleSize, offset, quietZone) {
   if (!palette.clipData) return;
   context.save();
@@ -2655,6 +2865,7 @@ function drawQrToCanvas(context, code, size) {
   }
 
   drawCanvasMarkers(context, code, moduleSize, offset, quietZone);
+  drawCanvasAlignmentPatterns(context, code, moduleSize, offset, quietZone);
 
   if (state.logoImage) {
     const box = getLogoBox(code, quietZone);
