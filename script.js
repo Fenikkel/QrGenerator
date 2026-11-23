@@ -73,8 +73,7 @@ const elements = {
   sectionResets: document.querySelectorAll("[data-reset-section]"),
   previewColumn: document.querySelector(".preview-column"),
   controlsColumn: document.querySelector(".controls-column"),
-  workspace: document.querySelector(".workspace"),
-  qrContent: document.querySelector(".qr-content"),
+  editorTabList: document.querySelector(".editor-tabs"),
   urlInputWrap: document.querySelector("#urlInputWrap"),
   url: document.querySelector("#urlInput"),
   urlHelp: document.querySelector("#urlHelp"),
@@ -217,6 +216,10 @@ let qrStructurePointerId = null;
 let previewTouch = null;
 const qrStructureKeys = new Set();
 const landscapeLayout = window.matchMedia("(aspect-ratio > 6/5)");
+const editorTabs = Array.from(elements.editorTabList.querySelectorAll('[role="tab"]'));
+const editorPanels = new Map(editorTabs.map((tab) => [tab, document.getElementById(tab.getAttribute("aria-controls"))]));
+const editorScrollPositions = new Map();
+let activeEditorTab = editorTabs[0];
 
 qrcode.stringToBytes = qrcode.stringToBytesFuncs["UTF-8"];
 
@@ -1814,6 +1817,7 @@ function releaseQrStructureHold() {
 
 function resizeQrTextField() {
   const textarea = elements.url;
+  if (textarea.clientWidth === 0) return;
   const style = getComputedStyle(textarea);
   const lineHeight = Number.parseFloat(style.lineHeight);
   const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
@@ -1829,26 +1833,28 @@ function resizeQrTextField() {
   textarea.scrollTop = scrollTop;
 }
 
-function updatePreviewDetailsHeight() {
-  const gap = Number.parseFloat(getComputedStyle(elements.previewColumn).rowGap) || 0;
-  const contentHeight = landscapeLayout.matches ? elements.qrContent.getBoundingClientRect().height + gap : 0;
-  elements.workspace.style.setProperty("--preview-details-height", `${Math.ceil(contentHeight)}px`);
+function revealEditorTab(tab) {
+  const bar = elements.editorTabList;
+  const bounds = bar.getBoundingClientRect();
+  const button = tab.getBoundingClientRect();
+  if (button.left < bounds.left) bar.scrollLeft += button.left - bounds.left;
+  else if (button.right > bounds.right) bar.scrollLeft += button.right - bounds.right;
 }
 
-function updateContentPlacement() {
-  const parent = landscapeLayout.matches ? elements.previewColumn : elements.controlsColumn;
-  if (elements.qrContent.parentNode !== parent) {
-    const focused = document.activeElement;
-    const restoreFocus = elements.qrContent.contains(focused);
-    const selection = focused === elements.url
-      ? [focused.selectionStart, focused.selectionEnd, focused.selectionDirection] : null;
-    parent.insertBefore(elements.qrContent, landscapeLayout.matches ? null : parent.firstChild);
-    if (restoreFocus) {
-      focused.focus({ preventScroll: true });
-      if (selection) focused.setSelectionRange(...selection);
-    }
+function selectEditorTab(tab) {
+  if (tab !== activeEditorTab) {
+    editorScrollPositions.set(activeEditorTab, elements.controlsColumn.scrollTop);
+    activeEditorTab.setAttribute("aria-selected", "false");
+    activeEditorTab.tabIndex = -1;
+    editorPanels.get(activeEditorTab).hidden = true;
+    activeEditorTab = tab;
+    tab.setAttribute("aria-selected", "true");
+    tab.tabIndex = 0;
+    editorPanels.get(tab).hidden = false;
+    resizeQrTextField();
+    elements.controlsColumn.scrollTop = editorScrollPositions.get(tab) ?? 0;
   }
-  updatePreviewDetailsHeight();
+  revealEditorTab(tab);
 }
 
 function clearPreview() {
@@ -2203,7 +2209,6 @@ elements.errorCorrection.addEventListener("change", () => {
 
 elements.previewColumn.addEventListener("wheel", (event) => {
   if (event.ctrlKey || !event.deltaY) return;
-  if (event.target === elements.url && elements.url.scrollHeight > elements.url.clientHeight) return;
   event.preventDefault();
   const lineHeight = Number.parseFloat(getComputedStyle(elements.controlsColumn).lineHeight) || 24;
   const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? lineHeight
@@ -2212,7 +2217,7 @@ elements.previewColumn.addEventListener("wheel", (event) => {
 }, { passive: false });
 
 elements.previewColumn.addEventListener("touchmove", (event) => {
-  if (event.cancelable && event.touches.length === 1 && !elements.qrContent.contains(event.target)) event.preventDefault();
+  if (event.cancelable && event.touches.length === 1) event.preventDefault();
 }, { passive: false });
 
 elements.previewColumn.addEventListener("pointerdown", (event) => {
@@ -2220,7 +2225,6 @@ elements.previewColumn.addEventListener("pointerdown", (event) => {
     releaseQrStructureHold();
     return;
   }
-  if (elements.qrContent.contains(event.target)) return;
   if (!event.isPrimary || event.button !== 0 || qrStructurePointerId !== null || previewTouch) return;
   const showStructure = state.qr && elements.canvasArea.contains(event.target);
   if (!showStructure && event.pointerType !== "touch") return;
@@ -2928,20 +2932,55 @@ elements.download.addEventListener("click", () => {
   }, "image/png");
 });
 
-landscapeLayout.addEventListener("change", () => {
-  releaseQrStructureHold();
-  updateContentPlacement();
+editorTabs.forEach((tab, index) => {
+  tab.addEventListener("click", () => selectEditorTab(tab));
+  tab.addEventListener("keydown", (event) => {
+    let nextIndex;
+    switch (event.key) {
+      case "ArrowLeft": nextIndex = (index + editorTabs.length - 1) % editorTabs.length; break;
+      case "ArrowRight": nextIndex = (index + 1) % editorTabs.length; break;
+      case "Home": nextIndex = 0; break;
+      case "End": nextIndex = editorTabs.length - 1; break;
+      default: return;
+    }
+    event.preventDefault();
+    const next = editorTabs[nextIndex];
+    selectEditorTab(next);
+    next.focus({ preventScroll: true });
+  });
 });
+
+elements.editorTabList.addEventListener("wheel", (event) => {
+  if (event.ctrlKey || event.shiftKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+  const bar = elements.editorTabList;
+  const start = bar.scrollLeft;
+  const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16
+    : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? bar.clientWidth : 1;
+  bar.scrollLeft += event.deltaY * unit;
+  if (bar.scrollLeft !== start) event.preventDefault();
+}, { passive: false });
+
+landscapeLayout.addEventListener("change", releaseQrStructureHold);
+new ResizeObserver(() => revealEditorTab(activeEditorTab)).observe(elements.editorTabList);
+const editorViewport = window.visualViewport;
+if (editorViewport) {
+  const resizeEditorToViewport = () => {
+    if (editorViewport.scale === 1) {
+      document.documentElement.style.setProperty("--editor-visible-height", `${editorViewport.height}px`);
+    } else {
+      document.documentElement.style.removeProperty("--editor-visible-height");
+    }
+  };
+  editorViewport.addEventListener("resize", resizeEditorToViewport);
+  resizeEditorToViewport();
+}
 let qrTextFieldWidth = 0;
-const previewDetailsObserver = new ResizeObserver(() => {
-  const width = elements.url.getBoundingClientRect().width;
+new ResizeObserver(([entry]) => {
+  const { width } = entry.contentRect;
   if (width !== qrTextFieldWidth) {
     qrTextFieldWidth = width;
     resizeQrTextField();
   }
-  updatePreviewDetailsHeight();
-});
-previewDetailsObserver.observe(elements.qrContent);
+}).observe(elements.urlInputWrap);
 
-updateContentPlacement();
 render();
