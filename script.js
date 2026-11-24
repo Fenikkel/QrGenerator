@@ -37,7 +37,7 @@ const state = {
   selectedFinderPattern: 0,
   finderPatterns: null,
   outerPolygon: createFinderPolygonSettings(),
-  innerPolygon: createFinderPolygonSettings(),
+  innerPolygon: { ...createFinderPolygonSettings(), moduleNoise: defaults.moduleNoise, moduleSmooth: defaults.moduleSmooth },
   alignmentAsModules: true,
   alignment: createAlignmentSettings(),
   individualCorners: false,
@@ -180,12 +180,12 @@ const sectionDefaults = {
   ].map((key) => [key, state[key]]))),
   finders: structuredClone(Object.fromEntries(FINDER_PROPERTIES.map((key) => [key, state[key]]))),
 };
-const POLYGON_RANGE_PROPERTIES = [
+const MODULE_RANGE_PROPERTIES = [
   ["moduleSides", ""], ["moduleScale", "%"],
-  ["moduleCornerRadius", "%"], ["moduleRotation", "°"],
+  ["moduleCornerRadius", "%"], ["moduleNoise", "%"],
+  ["moduleSmooth", "%"], ["moduleRotation", "°"],
 ];
-const BLOB_ONLY_RANGE_PROPERTIES = [["moduleNoise", "%"], ["moduleSmooth", "%"]];
-const MODULE_RANGE_PROPERTIES = [...POLYGON_RANGE_PROPERTIES, ...BLOB_ONLY_RANGE_PROPERTIES];
+const POLYGON_RANGE_PROPERTIES = MODULE_RANGE_PROPERTIES.filter(([key]) => !["moduleNoise", "moduleSmooth"].includes(key));
 const BLOB_RANGE_PROPERTIES = MODULE_RANGE_PROPERTIES.filter(([key]) => key !== "moduleCornerRadius");
 const FIGURE_RANGE_PROPERTIES = POLYGON_RANGE_PROPERTIES.filter(([key]) => ["moduleScale", "moduleRotation"].includes(key));
 const MODULE_FIGURES = ["cross", "heart", "rounded-star"];
@@ -210,7 +210,7 @@ const moduleStepsControls = new Map(Array.from(elements.moduleStepsOptions, (but
 const individualCornerControls = createIndividualCornerControls();
 const moduleColorControls = createModuleColorControls();
 const outerPolygonControls = createFinderPolygonControls("outer");
-const innerPolygonControls = createFinderPolygonControls("inner");
+const innerPolygonControls = createFinderPolygonControls("inner", { rangeProperties: MODULE_RANGE_PROPERTIES });
 const finderPolygonControls = { outer: outerPolygonControls, inner: innerPolygonControls };
 const alignmentControls = Object.fromEntries(["outer", "inner"].map((part) => [part, createAlignmentControls(part)]));
 const finderPolygonCache = new Map();
@@ -414,8 +414,9 @@ function createFinderPolygonControls(part, {
   container = document.querySelector(`#${part}PolygonProperties`),
   owner = `${part === "outer" ? "Outer" : "Inner"} marker`,
   getSettings = () => getFinderSettings()[`${part}Polygon`],
+  rangeProperties = POLYGON_RANGE_PROPERTIES,
 } = {}) {
-  const controls = {};
+  const controls = { rangeProperties };
   const controlId = (id) => `${prefix}${id[0].toUpperCase()}${id.slice(1)}`;
   controls.figureField = document.createElement("div");
   controls.figureField.className = "range-field";
@@ -437,7 +438,7 @@ function createFinderPolygonControls(part, {
     });
   });
   container.append(controls.figureField);
-  POLYGON_RANGE_PROPERTIES.forEach(([key]) => {
+  rangeProperties.forEach(([key]) => {
     const field = document.createElement("div");
     field.className = "range-field";
     const heading = document.createElement("div");
@@ -488,15 +489,17 @@ function createFinderPolygonControls(part, {
 
 function syncFinderPolygonControls(part, finder = getFinderSettings(), editor = finderPolygonControls[part]) {
   const settings = finder[`${part}Polygon`];
-  const figure = finder[`${part}MarkerStyle`] === "figure";
-  editor.figureField.hidden = !figure;
+  const style = finder[`${part}MarkerStyle`];
+  const activeProperties = getModuleRangeProperties(style);
+  const hasIndividualCorners = style === "regular-polygon" && settings.individualCorners;
+  editor.figureField.hidden = style !== "figure";
   editor.figures.forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.finderFigure === settings.moduleFigure));
   });
-  POLYGON_RANGE_PROPERTIES.forEach(([key, suffix]) => {
+  editor.rangeProperties.forEach(([key, suffix]) => {
     const control = editor[key];
-    control.field.hidden = figure && ["moduleSides", "moduleCornerRadius"].includes(key);
-    const individual = !figure && key === "moduleCornerRadius" && settings.individualCorners;
+    control.field.hidden = !activeProperties.some(([property]) => property === key);
+    const individual = key === "moduleCornerRadius" && hasIndividualCorners;
     control.input.value = settings[key];
     control.output.textContent = `${settings[key]}${suffix}`;
     control.manual.hidden = individual;
@@ -504,9 +507,9 @@ function syncFinderPolygonControls(part, finder = getFinderSettings(), editor = 
     control.label.htmlFor = individual ? editor.corners[0].input.id : control.input.id;
   });
   editor.individual.setAttribute("aria-pressed", String(settings.individualCorners));
-  editor.cornerContainer.hidden = figure || !settings.individualCorners;
+  editor.cornerContainer.hidden = !hasIndividualCorners;
   editor.corners.forEach((control, index) => {
-    const visible = !figure && settings.individualCorners && index < settings.moduleSides;
+    const visible = hasIndividualCorners && index < settings.moduleSides;
     const value = settings.cornerRadii?.[index].value ?? settings.moduleCornerRadius;
     control.field.hidden = !visible;
     control.input.disabled = !visible;
@@ -572,12 +575,19 @@ function syncAlignmentControls() {
     });
   }
   const randomAlignmentColors = !state.alignmentAsModules && ["outer", "inner"].some((part) => getAlignmentColorCount(part, state.qr) > 1);
-  elements.moduleSeedField.hidden = state.moduleStyle !== "blob" && !hasRandomModuleProperties() && state.moduleColorCount === 1 && !randomAlignmentColors;
+  const hasFinderBlob = [0, 1, 2].some((index) => {
+    const finder = getFinderSettings(index);
+    return !finder.innerAsModules && finder.innerMarkerStyle === "blob";
+  });
+  elements.moduleSeedField.hidden = state.moduleStyle !== "blob" && !hasRandomModuleProperties()
+    && state.moduleColorCount === 1 && !randomAlignmentColors && !hasFinderBlob;
 }
 
 function getPatternPolygon(style, settings) {
+  const rangeProperties = style === "blob" ? BLOB_RANGE_PROPERTIES : POLYGON_RANGE_PROPERTIES;
+  const properties = Object.fromEntries(rangeProperties.map(([key]) => [key, settings[key]]));
+  if (style === "blob") return { geometry: getBlobGeometry(properties), properties };
   const figure = style === "figure";
-  const properties = Object.fromEntries(POLYGON_RANGE_PROPERTIES.map(([key]) => [key, settings[key]]));
   properties.moduleFigure = settings.moduleFigure;
   if (!figure && settings.individualCorners) properties.moduleCornerRadii = settings.cornerRadii.slice(0, settings.moduleSides).map((corner) => corner.value);
   return { geometry: figure ? getFigureGeometry(properties) : getRegularPolygonGeometry(properties), properties };
@@ -585,11 +595,13 @@ function getPatternPolygon(style, settings) {
 
 function getFinderPolygon(markerIndex, part = "outer") {
   const finder = getFinderSettings(markerIndex);
+  const style = finder[`${part}MarkerStyle`];
   const settings = finder[`${part}Polygon`];
+  const color = finder[`${part}MarkerColor`];
   const cacheIndex = `${part}:${markerIndex}`;
-  const cacheKey = JSON.stringify([finder[`${part}MarkerStyle`], settings, finder[`${part}MarkerColor`]]);
+  const cacheKey = JSON.stringify([style, settings, color, style === "blob" ? state.moduleSeed : null]);
   if (finderPolygonCache.get(cacheIndex)?.key === cacheKey) return finderPolygonCache.get(cacheIndex).value;
-  const value = { ...getPatternPolygon(finder[`${part}MarkerStyle`], settings), color: finder[`${part}MarkerColor`] };
+  const value = { ...getPatternPolygon(style, settings), color };
   finderPolygonCache.set(cacheIndex, { key: cacheKey, value });
   return value;
 }
@@ -760,7 +772,7 @@ function getModuleScale() {
   return state.moduleScale / 100;
 }
 
-function getRandomModuleProperties(style = state.moduleStyle) {
+function getModuleRangeProperties(style = state.moduleStyle) {
   if (style === "regular-polygon") return POLYGON_RANGE_PROPERTIES;
   if (style === "blob") return BLOB_RANGE_PROPERTIES;
   if (style === "figure") return FIGURE_RANGE_PROPERTIES;
@@ -769,7 +781,7 @@ function getRandomModuleProperties(style = state.moduleStyle) {
 
 function hasRandomModuleProperties(style = state.moduleStyle) {
   return (style === "figure" && state.moduleFigures.length > 1)
-    || getRandomModuleProperties(style).some(([key]) => state.moduleRandom[key]
+    || getModuleRangeProperties(style).some(([key]) => state.moduleRandom[key]
       || (key === "moduleRotation" && state.rotationQuarterTurns)
       || state.moduleSteps[key]?.enabled);
 }
@@ -828,7 +840,7 @@ function getModuleGeometryResolver(style = state.moduleStyle) {
     } : state);
     return () => geometry;
   }
-  const rangeProperties = getRandomModuleProperties(style);
+  const rangeProperties = getModuleRangeProperties(style);
   const individual = style === "regular-polygon" && state.individualCorners;
   const key = `${style}:${style === "figure" ? state.moduleFigures.join(",") : ""}:${state.moduleSeed}:` + rangeProperties.map(([property]) => (
     state.moduleSteps[property]?.enabled
@@ -2035,7 +2047,7 @@ function render() {
   });
   elements.moduleStyle.value = state.moduleStyle;
   const supportsMerge = supportsModuleMerge(state.moduleStyle);
-  const randomProperties = getRandomModuleProperties();
+  const randomProperties = getModuleRangeProperties();
   elements.moduleSides.closest(".range-field").hidden = !supportsMerge;
   elements.polygonProperties.forEach((field) => { field.hidden = state.moduleStyle !== "regular-polygon"; });
   elements.blobProperties.forEach((field) => { field.hidden = state.moduleStyle !== "blob"; });
