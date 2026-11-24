@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="styles.css?v=20261105-15">
     <script src="vendor/qrcode.js?v=20261105-1" defer></script>
     <script src="logo-area.js?v=20261105-1" defer></script>
-    <script src="script.js?v=20261105-25" defer></script>
+    <script src="script.js?v=20261124-1" defer></script>
   </head>
   <body>
     <main>
@@ -77,10 +77,11 @@
                 <span>Style</span>
                 <select id="moduleStyle" aria-label="Module style">
                   <option value="regular-polygon" selected>Regular polygon</option>
+                  <option value="blob">Blob</option>
                   <option value="figure">Figure</option>
                 </select>
               </label>
-              <div class="range-field polygon-property style-property">
+              <div class="range-field style-property">
                 <div class="property-heading">
                   <label for="moduleSides">Sides</label>
                   <button type="button" class="shuffle-button" data-module-random="moduleSides" aria-label="Randomize module sides" aria-pressed="false" aria-controls="moduleSidesControl moduleSidesRandomControl" title="Randomize sides">
@@ -114,7 +115,7 @@
                   <button type="button" class="shuffle-button" data-module-random="moduleScale" aria-label="Randomize module size" aria-pressed="false" aria-controls="moduleScaleControl moduleScaleRandomControl" title="Randomize size">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18 3 3 3-3 3m0 6 3 3-3 3M3 6h2c5 0 9 12 14 12h2M3 18h2c5 0 9-12 14-12h2"/></svg>
                   </button>
-                  <button id="discreteSizesToggle" type="button" class="shuffle-button" aria-label="Random size steps" title="Random size steps" aria-pressed="false" aria-controls="moduleSizeCountControl">
+                  <button id="discreteSizesToggle" type="button" class="shuffle-button" data-module-steps="moduleScale" aria-label="Random size steps" title="Random size steps" aria-pressed="false" aria-controls="moduleSizeCountControl">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M4 20v-5h4v5m2 0V9h4v11m2 0V4h4v16"/></svg>
                   </button>
                 </div>
@@ -160,6 +161,62 @@
                   <output data-bound-value="max" for="moduleCornerRadiusMax">100%</output>
                 </div>
                 <div id="individualCornerControls" class="individual-corner-controls" role="group" aria-label="Individual corner radii" hidden></div>
+              </div>
+              <div class="range-field blob-property style-property" hidden>
+                <div class="property-heading">
+                  <label for="moduleNoise">Noise</label>
+                  <button type="button" class="shuffle-button" data-module-random="moduleNoise" aria-label="Randomize module noise" aria-pressed="false" aria-controls="moduleNoiseControl moduleNoiseRandomControl" title="Randomize noise">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18 3 3 3-3 3m0 6 3 3-3 3M3 6h2c5 0 9 12 14 12h2M3 18h2c5 0 9-12 14-12h2"/></svg>
+                  </button>
+                  <button type="button" class="shuffle-button" data-module-steps="moduleNoise" aria-label="Randomize noise steps" title="Randomize noise steps" aria-pressed="false" aria-controls="moduleNoiseCountControl">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M4 20v-5h4v5m2 0V9h4v11m2 0V4h4v16"/></svg>
+                  </button>
+                </div>
+                <span id="moduleNoiseControl" class="range-control">
+                  <input id="moduleNoise" type="range" min="0" max="100" step="1" value="36">
+                  <output id="moduleNoiseValue" for="moduleNoise">36%</output>
+                </span>
+                <div id="moduleNoiseRandomControl" class="random-range" data-module-random-range="moduleNoise" role="group" aria-label="Random module noise range" hidden>
+                  <output data-bound-value="min" for="moduleNoiseMin">0%</output>
+                  <div class="random-range-track">
+                    <span class="random-range-rail" aria-hidden="true"></span>
+                    <input id="moduleNoiseMin" type="range" min="0" max="100" step="1" value="0" data-bound="min" aria-label="Minimum random module noise">
+                    <input id="moduleNoiseMax" type="range" min="0" max="100" step="1" value="100" data-bound="max" aria-label="Maximum random module noise">
+                  </div>
+                  <output data-bound-value="max" for="moduleNoiseMax">100%</output>
+                </div>
+                <span id="moduleNoiseCountControl" class="range-control" hidden>
+                  <input id="moduleNoiseCount" type="range" min="2" max="3" step="1" value="2" aria-label="Number of random module noise steps">
+                  <output for="moduleNoiseCount">2</output>
+                </span>
+              </div>
+              <div class="range-field blob-property style-property" hidden>
+                <div class="property-heading">
+                  <label for="moduleSmooth">Smooth</label>
+                  <button type="button" class="shuffle-button" data-module-random="moduleSmooth" aria-label="Randomize module smooth" aria-pressed="false" aria-controls="moduleSmoothControl moduleSmoothRandomControl" title="Randomize smooth">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18 3 3 3-3 3m0 6 3 3-3 3M3 6h2c5 0 9 12 14 12h2M3 18h2c5 0 9-12 14-12h2"/></svg>
+                  </button>
+                  <button type="button" class="shuffle-button" data-module-steps="moduleSmooth" aria-label="Randomize smooth steps" title="Randomize smooth steps" aria-pressed="false" aria-controls="moduleSmoothCountControl">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M4 20v-5h4v5m2 0V9h4v11m2 0V4h4v16"/></svg>
+                  </button>
+                </div>
+                <span id="moduleSmoothControl" class="range-control">
+                  <input id="moduleSmooth" type="range" min="0" max="100" step="1" value="78">
+                  <output id="moduleSmoothValue" for="moduleSmooth">78%</output>
+                </span>
+                <div id="moduleSmoothRandomControl" class="random-range" data-module-random-range="moduleSmooth" role="group" aria-label="Random module smooth range" hidden>
+                  <output data-bound-value="min" for="moduleSmoothMin">0%</output>
+                  <div class="random-range-track">
+                    <span class="random-range-rail" aria-hidden="true"></span>
+                    <input id="moduleSmoothMin" type="range" min="0" max="100" step="1" value="0" data-bound="min" aria-label="Minimum random module smooth">
+                    <input id="moduleSmoothMax" type="range" min="0" max="100" step="1" value="100" data-bound="max" aria-label="Maximum random module smooth">
+                  </div>
+                  <output data-bound-value="max" for="moduleSmoothMax">100%</output>
+                </div>
+                <span id="moduleSmoothCountControl" class="range-control" hidden>
+                  <input id="moduleSmoothCount" type="range" min="2" max="3" step="1" value="2" aria-label="Number of random module smooth steps">
+                  <output for="moduleSmoothCount">2</output>
+                </span>
               </div>
               <div class="range-field shape-property style-property">
                 <div class="property-heading">
