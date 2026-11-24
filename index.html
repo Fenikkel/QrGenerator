@@ -7,10 +7,10 @@
     <meta name="description" content="QR code generator with SVG and PNG export.">
     <title>QR Generator</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=20261105-15">
+    <link rel="stylesheet" href="styles.css?v=20261124-1">
     <script src="vendor/qrcode.js?v=20261105-1" defer></script>
     <script src="logo-area.js?v=20261105-1" defer></script>
-    <script src="script.js?v=20261124-2" defer></script>
+    <script src="script.js?v=20261124-3" defer></script>
   </head>
   <body>
     <main>
@@ -400,6 +400,22 @@
                   </div>
                 </div>
               </div>
+            </div>
+          </section>
+
+          <section aria-labelledby="backgroundTitle">
+            <div class="section-heading">
+              <h2 id="backgroundTitle" class="section-title">Background</h2>
+              <button type="button" class="shuffle-button section-reset" data-reset-section="background" aria-label="Reset Background" title="Reset Background"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/></svg></button>
+            </div>
+            <div class="controls color-field">
+              <label for="backgroundColor">Color</label>
+              <span class="color-input-wrap">
+                <span class="background-color-swatch" data-transparent>
+                  <input id="backgroundColor" type="color" value="#ffffff" aria-label="Background color">
+                </span>
+                <input id="backgroundColorValue" class="hex-input" type="text" value="Transparent" maxlength="11" spellcheck="false" aria-label="Background hex color or transparent">
+              </span>
             </div>
           </section>
 

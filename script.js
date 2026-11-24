@@ -20,6 +20,7 @@ const defaults = {
   moduleSmooth: 78,
   moduleRotation: 0,
   moduleMerge: "none",
+  backgroundColor: "transparent",
   exportFormat: "svg",
   exportSize: "256",
   logoSize: 20,
@@ -150,6 +151,8 @@ const elements = {
   moduleColorCount: document.querySelector("#moduleColorCount"),
   moduleColorCountValue: document.querySelector("#moduleColorCountValue"),
   moduleColorEditors: document.querySelector("#moduleColorEditors"),
+  backgroundColor: document.querySelector("#backgroundColor"),
+  backgroundColorValue: document.querySelector("#backgroundColorValue"),
   logoInput: document.querySelector("#logoInput"),
   logoDropZone: document.querySelector("#logoDropZone"),
   logoFileName: document.querySelector("#logoFileName"),
@@ -1983,6 +1986,8 @@ function resetSection(section) {
   } else if (section === "alignments") {
     state.alignmentAsModules = true;
     state.alignment = createAlignmentSettings();
+  } else if (section === "background") {
+    state.backgroundColor = defaults.backgroundColor;
   } else if (section === "logo") {
     clearLogo(false);
     state.logoSize = defaults.logoSize;
@@ -2102,6 +2107,10 @@ function render() {
     const limits = MODULE_RANDOM_PROPERTIES[key];
     syncRandomRangeControls(controls, range, limits, suffix);
   });
+  const transparentBackground = state.backgroundColor === "transparent";
+  elements.backgroundColor.parentElement.toggleAttribute("data-transparent", transparentBackground);
+  if (!transparentBackground) elements.backgroundColor.value = state.backgroundColor;
+  elements.backgroundColorValue.value = transparentBackground ? "Transparent" : state.backgroundColor.toUpperCase();
   if (!trimmedValue) {
     state.qr = null;
     state.encodedUrl = "";
@@ -2134,6 +2143,11 @@ function render() {
   const dimension = state.qr.getModuleCount() + QUIET_ZONE * 2;
   elements.canvasArea.style.setProperty("--checkerboard-size", `calc(200% / ${dimension})`);
   elements.preview.replaceChildren();
+  if (!transparentBackground) {
+    elements.preview.append(setAttributes(document.createElementNS(SVG_NAMESPACE, "rect"), {
+      width: dimension, height: dimension, fill: state.backgroundColor,
+    }));
+  }
   appendSvgModules(elements.preview, state.qr);
   appendSvgMarkers(elements.preview, state.qr);
   appendSvgAlignmentPatterns(elements.preview, state.qr);
@@ -2642,13 +2656,16 @@ elements.sectionResets.forEach((button) => {
   button.addEventListener("click", () => resetSection(button.dataset.resetSection));
 });
 
-function bindColorEditor(colorInput, hexInput, getValue, applyValue) {
+function bindColorEditor(colorInput, hexInput, getValue, applyValue, { allowTransparent = false } = {}) {
   colorInput.addEventListener("input", () => applyValue(colorInput.value));
 
   hexInput.addEventListener("input", () => {
     const value = hexInput.value.trim();
-    if (!/^#?[\da-f]{6}$/i.test(value)) return;
-    applyValue(`#${value.replace("#", "")}`);
+    if (allowTransparent && value.toLowerCase() === "transparent") {
+      applyValue("transparent");
+    } else if (/^#?[\da-f]{6}$/i.test(value)) {
+      applyValue(`#${value.replace("#", "")}`);
+    }
   });
 
   hexInput.addEventListener("blur", () => {
@@ -2678,9 +2695,15 @@ moduleColorControls.slice(1).forEach((controls, index) => {
     render();
   });
 });
+bindColorEditor(elements.backgroundColor, elements.backgroundColorValue, () => state.backgroundColor, (value) => {
+  state.backgroundColor = value.toLowerCase();
+  render();
+}, { allowTransparent: true });
 
 function buildSvg(code, size) {
   const dimension = code.getModuleCount() + QUIET_ZONE * 2;
+  const backgroundData = state.backgroundColor === "transparent" ? ""
+    : `<rect width="${dimension}" height="${dimension}" fill="${state.backgroundColor}"/>`;
   let moduleData;
   const palette = getModulePalettePaint(code);
   if (palette) {
@@ -2717,7 +2740,7 @@ function buildSvg(code, size) {
     const box = getLogoBox(code);
     logoData = `<image x="${formatNumber(box.x, 6)}" y="${formatNumber(box.y, 6)}" width="${formatNumber(box.width, 6)}" height="${formatNumber(box.height, 6)}" href="${state.logoDataUrl}" preserveAspectRatio="xMidYMid meet"/>`;
   }
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${dimension} ${dimension}" shape-rendering="${rendering}">${definitions}${moduleData}${markerData}${alignmentData}${logoData}</svg>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${dimension} ${dimension}" shape-rendering="${rendering}">${definitions}${backgroundData}${moduleData}${markerData}${alignmentData}${logoData}</svg>\n`;
 }
 
 function addRoundedRectPath(context, x, y, width, height, radius) {
@@ -2983,6 +3006,14 @@ function drawQrToCanvas(context, code, size) {
       box.width * moduleSize,
       box.height * moduleSize,
     );
+  }
+  if (state.backgroundColor !== "transparent") {
+    // Add the background after palette compositing so the palette only colors QR artwork.
+    context.save();
+    context.globalCompositeOperation = "destination-over";
+    context.fillStyle = state.backgroundColor;
+    context.fillRect(0, 0, size, size);
+    context.restore();
   }
 }
 

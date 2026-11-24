@@ -468,6 +468,16 @@ select:focus-visible {
   padding: 0 8px;
 }
 
+.background-color-swatch { display: flex; position: relative; }
+.background-color-swatch[data-transparent]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 1px solid var(--text);
+  background: conic-gradient(from 90deg, #ddd 25%, #fff 0 50%, #ddd 0 75%, #fff 0) 0 0 / 8px 8px;
+}
+
 input[type="color"] {
   width: 24px;
   height: 24px;
