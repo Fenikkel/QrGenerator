@@ -171,6 +171,8 @@ const elements = {
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const QUIET_ZONE = 4;
 const MODULE_PALETTE_CLIP_ID = "module-palette-clip";
+const OUTER_FINDER_SIDE_LIMITS = { min: 4, max: 12, step: 4 };
+const OUTER_FINDER_POLYGON_TRANSFORM = { moduleScale: 100, moduleRotation: 0 };
 const FINDER_PROPERTIES = [
   "outerAsModules", "innerAsModules", "outerMarkerStyle", "innerMarkerStyle",
   "outerMarkerColor", "innerMarkerColor", "cutOuterMarkerCorners", "outerMarkerCornersOnly",
@@ -212,7 +214,10 @@ const moduleStepsControls = new Map(Array.from(elements.moduleStepsOptions, (but
 }));
 const individualCornerControls = createIndividualCornerControls();
 const moduleColorControls = createModuleColorControls();
-const outerPolygonControls = createFinderPolygonControls("outer");
+const outerPolygonControls = createFinderPolygonControls("outer", {
+  sideLimits: OUTER_FINDER_SIDE_LIMITS,
+  fixedPolygonProperties: OUTER_FINDER_POLYGON_TRANSFORM,
+});
 const innerPolygonControls = createFinderPolygonControls("inner", { rangeProperties: MODULE_RANGE_PROPERTIES });
 const finderPolygonControls = { outer: outerPolygonControls, inner: innerPolygonControls };
 const alignmentControls = Object.fromEntries(["outer", "inner"].map((part) => [part, createAlignmentControls(part)]));
@@ -418,8 +423,10 @@ function createFinderPolygonControls(part, {
   owner = `${part === "outer" ? "Outer" : "Inner"} marker`,
   getSettings = () => getFinderSettings()[`${part}Polygon`],
   rangeProperties = POLYGON_RANGE_PROPERTIES,
+  sideLimits = {},
+  fixedPolygonProperties = {},
 } = {}) {
-  const controls = { rangeProperties };
+  const controls = { rangeProperties, fixedPolygonProperties };
   const controlId = (id) => `${prefix}${id[0].toUpperCase()}${id.slice(1)}`;
   controls.figureField = document.createElement("div");
   controls.figureField.className = "range-field";
@@ -454,6 +461,7 @@ function createFinderPolygonControls(part, {
     manual.id = `${controlId(key)}Control`;
     const input = manual.querySelector("input");
     input.id = controlId(key);
+    if (key === "moduleSides") Object.assign(input, sideLimits);
     input.setAttribute("aria-label", `${owner} ${label.textContent.toLowerCase()}`);
     const output = manual.querySelector("output");
     output.id = `${controlId(key)}Value`;
@@ -475,13 +483,16 @@ function createFinderPolygonControls(part, {
       controls.cornerContainer.setAttribute("aria-label", `${owner} individual corner radii`);
       controls.cornerContainer.hidden = true;
       field.append(controls.cornerContainer);
-      controls.corners = createIndividualCornerControls({ prefix: `${prefix}Corner`, container: controls.cornerContainer, source: input, randomSource: null, label: owner });
+      controls.corners = createIndividualCornerControls({
+        prefix: `${prefix}Corner`, container: controls.cornerContainer, source: input, randomSource: null, label: owner,
+        count: sideLimits.max ?? Number(elements.moduleSides.max),
+      });
       controls.corners.forEach((corner, index) => {
         corner.input.addEventListener("input", () => { getSettings().cornerRadii[index].value = Number(corner.input.value); render(); });
       });
       controls.individual.addEventListener("click", () => {
         const settings = getSettings();
-        settings.cornerRadii ||= Array.from({ length: 9 }, () => ({ value: settings.moduleCornerRadius }));
+        settings.cornerRadii ||= controls.corners.map(() => ({ value: settings.moduleCornerRadius }));
         settings.individualCorners = !settings.individualCorners;
         render();
       });
@@ -501,7 +512,8 @@ function syncFinderPolygonControls(part, finder = getFinderSettings(), editor = 
   });
   editor.rangeProperties.forEach(([key, suffix]) => {
     const control = editor[key];
-    control.field.hidden = !activeProperties.some(([property]) => property === key);
+    const fixed = style === "regular-polygon" && Object.hasOwn(editor.fixedPolygonProperties, key);
+    control.field.hidden = fixed || !activeProperties.some(([property]) => property === key);
     const individual = key === "moduleCornerRadius" && hasIndividualCorners;
     control.input.value = settings[key];
     control.output.textContent = `${settings[key]}${suffix}`;
@@ -599,7 +611,9 @@ function getPatternPolygon(style, settings) {
 function getFinderPolygon(markerIndex, part = "outer") {
   const finder = getFinderSettings(markerIndex);
   const style = finder[`${part}MarkerStyle`];
-  const settings = finder[`${part}Polygon`];
+  const polygon = finder[`${part}Polygon`];
+  const settings = part === "outer" && style === "regular-polygon"
+    ? { ...polygon, ...OUTER_FINDER_POLYGON_TRANSFORM } : polygon;
   const color = finder[`${part}MarkerColor`];
   const cacheIndex = `${part}:${markerIndex}`;
   const cacheKey = JSON.stringify([style, settings, color, style === "blob" ? state.moduleSeed : null]);
@@ -692,8 +706,11 @@ function getRandomRangeControls(group) {
   };
 }
 
-function createIndividualCornerControls({ prefix = "moduleCorner", container = elements.individualCornerControls, source = elements.moduleCornerRadius, randomSource = moduleRandomControls.get("moduleCornerRadius").group, label: owner = "Module" } = {}) {
-  return Array.from({ length: 9 }, (_, index) => {
+function createIndividualCornerControls({
+  prefix = "moduleCorner", container = elements.individualCornerControls, source = elements.moduleCornerRadius,
+  randomSource = moduleRandomControls.get("moduleCornerRadius").group, label: owner = "Module", count = Number(elements.moduleSides.max),
+} = {}) {
+  return Array.from({ length: count }, (_, index) => {
     const id = `${prefix}${index + 1}`;
     const field = document.createElement("div");
     field.className = "individual-corner-field";
