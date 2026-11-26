@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="styles.css?v=20261124-1">
     <script src="vendor/qrcode.js?v=20261105-1" defer></script>
     <script src="logo-area.js?v=20261105-1" defer></script>
-    <script src="script.js?v=20261126-1" defer></script>
+    <script src="script.js?v=20261126-7" defer></script>
   </head>
   <body>
     <main>
@@ -296,9 +296,26 @@
                   <div id="outerMarkerProperties">
                     <select id="outerMarkerStyle" aria-label="Outer style">
                       <option value="regular-polygon" selected>Regular polygon</option>
+                      <option value="wobbly-polygon">Wobbly polygon</option>
                       <option value="figure">Figures</option>
                     </select>
                     <div id="outerPolygonProperties" class="finder-polygon-properties"></div>
+                    <div id="outerWobblyProperties" class="finder-polygon-properties" hidden>
+                      <div class="range-field">
+                        <div class="property-heading"><label for="outerWobble">Wobble</label></div>
+                        <span class="range-control">
+                          <input id="outerWobble" data-wobbly="wobble" type="range" min="0" max="100" step="1" value="55">
+                          <output for="outerWobble">55%</output>
+                        </span>
+                      </div>
+                      <div class="range-field">
+                        <div class="property-heading"><label for="outerEdgeBend">Edge bend</label></div>
+                        <span class="range-control">
+                          <input id="outerEdgeBend" data-wobbly="edgeBend" type="range" min="0" max="100" step="1" value="0">
+                          <output for="outerEdgeBend">0%</output>
+                        </span>
+                      </div>
+                    </div>
                     <div class="color-field style-property">
                       <label for="outerMarkerColor">Color</label>
                       <span class="color-input-wrap">

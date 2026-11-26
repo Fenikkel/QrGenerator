@@ -38,6 +38,7 @@ const state = {
   selectedFinderPattern: 0,
   finderPatterns: null,
   outerPolygon: createFinderPolygonSettings(),
+  outerWobbly: { wobble: 55, edgeBend: 0 },
   innerPolygon: { ...createFinderPolygonSettings(), moduleNoise: defaults.moduleNoise, moduleSmooth: defaults.moduleSmooth },
   alignmentAsModules: true,
   alignment: createAlignmentSettings(),
@@ -137,6 +138,7 @@ const elements = {
   outerMarkerControls: document.querySelector("#outerMarkerControls"),
   innerMarkerControls: document.querySelector("#innerMarkerControls"),
   outerMarkerStyle: document.querySelector("#outerMarkerStyle"),
+  outerWobblyProperties: document.querySelector("#outerWobblyProperties"),
   cutOuterMarkerCorners: document.querySelector("#cutOuterMarkerCorners"),
   outerMarkerCornersOnly: document.querySelector("#outerMarkerCornersOnly"),
   innerMarkerStyle: document.querySelector("#innerMarkerStyle"),
@@ -171,12 +173,13 @@ const elements = {
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const QUIET_ZONE = 4;
 const MODULE_PALETTE_CLIP_ID = "module-palette-clip";
+const OUTER_FINDER_SIZE = 7;
 const OUTER_FINDER_SIDE_LIMITS = { min: 4, max: 12, step: 4 };
 const OUTER_FINDER_POLYGON_TRANSFORM = { moduleScale: 100, moduleRotation: 0 };
 const FINDER_PROPERTIES = [
   "outerAsModules", "innerAsModules", "outerMarkerStyle", "innerMarkerStyle",
   "outerMarkerColor", "innerMarkerColor", "cutOuterMarkerCorners", "outerMarkerCornersOnly",
-  "outerPolygon", "innerPolygon",
+  "outerPolygon", "outerWobbly", "innerPolygon",
 ];
 const sectionDefaults = {
   module: structuredClone(Object.fromEntries([
@@ -202,6 +205,7 @@ const MODULE_RANDOM_PROPERTIES = {
   moduleNoise: { min: 0, max: 100, salt: 0x299f31d0 },
   moduleSmooth: { min: 0, max: 100, salt: 0xd1310ba6 },
   moduleBlobContour: { salt: 0x98dfb5ac },
+  wobblyContour: { salt: 0xa13b1f37 },
   moduleColor: { salt: 0xa4093822 },
   moduleFigure: { salt: 0x082efa98 },
   alignmentOuterColor: { salt: 0x452821e6 },
@@ -218,6 +222,9 @@ const outerPolygonControls = createFinderPolygonControls("outer", {
   sideLimits: OUTER_FINDER_SIDE_LIMITS,
   fixedPolygonProperties: OUTER_FINDER_POLYGON_TRANSFORM,
 });
+const outerWobblyControls = Array.from(elements.outerWobblyProperties.querySelectorAll("[data-wobbly]"), (input) => ({
+  key: input.dataset.wobbly, input, output: input.parentElement.querySelector("output"),
+}));
 const innerPolygonControls = createFinderPolygonControls("inner", { rangeProperties: MODULE_RANGE_PROPERTIES });
 const finderPolygonControls = { outer: outerPolygonControls, inner: innerPolygonControls };
 const alignmentControls = Object.fromEntries(["outer", "inner"].map((part) => [part, createAlignmentControls(part)]));
@@ -504,6 +511,7 @@ function createFinderPolygonControls(part, {
 function syncFinderPolygonControls(part, finder = getFinderSettings(), editor = finderPolygonControls[part]) {
   const settings = finder[`${part}Polygon`];
   const style = finder[`${part}MarkerStyle`];
+  const wobbly = style === "wobbly-polygon";
   const activeProperties = getModuleRangeProperties(style);
   const hasIndividualCorners = style === "regular-polygon" && settings.individualCorners;
   editor.figureField.hidden = style !== "figure";
@@ -513,7 +521,7 @@ function syncFinderPolygonControls(part, finder = getFinderSettings(), editor = 
   editor.rangeProperties.forEach(([key, suffix]) => {
     const control = editor[key];
     const fixed = style === "regular-polygon" && Object.hasOwn(editor.fixedPolygonProperties, key);
-    control.field.hidden = fixed || !activeProperties.some(([property]) => property === key);
+    control.field.hidden = wobbly ? key !== "moduleSides" : fixed || !activeProperties.some(([property]) => property === key);
     const individual = key === "moduleCornerRadius" && hasIndividualCorners;
     control.input.value = settings[key];
     control.output.textContent = `${settings[key]}${suffix}`;
@@ -590,12 +598,13 @@ function syncAlignmentControls() {
     });
   }
   const randomAlignmentColors = !state.alignmentAsModules && ["outer", "inner"].some((part) => getAlignmentColorCount(part, state.qr) > 1);
-  const hasFinderBlob = [0, 1, 2].some((index) => {
+  const hasSeededFinder = [0, 1, 2].some((index) => {
     const finder = getFinderSettings(index);
-    return !finder.innerAsModules && finder.innerMarkerStyle === "blob";
+    return (!finder.innerAsModules && finder.innerMarkerStyle === "blob")
+      || (!finder.outerAsModules && finder.outerMarkerStyle === "wobbly-polygon");
   });
   elements.moduleSeedField.hidden = state.moduleStyle !== "blob" && !hasRandomModuleProperties()
-    && state.moduleColorCount === 1 && !randomAlignmentColors && !hasFinderBlob;
+    && state.moduleColorCount === 1 && !randomAlignmentColors && !hasSeededFinder;
 }
 
 function getPatternPolygon(style, settings) {
@@ -611,21 +620,25 @@ function getPatternPolygon(style, settings) {
 function getFinderPolygon(markerIndex, part = "outer") {
   const finder = getFinderSettings(markerIndex);
   const style = finder[`${part}MarkerStyle`];
+  const wobbly = style === "wobbly-polygon" ? finder.outerWobbly : null;
   const polygon = finder[`${part}Polygon`];
-  const settings = part === "outer" && style === "regular-polygon"
+  const settings = part === "outer" && (style === "regular-polygon" || wobbly)
     ? { ...polygon, ...OUTER_FINDER_POLYGON_TRANSFORM } : polygon;
   const color = finder[`${part}MarkerColor`];
   const cacheIndex = `${part}:${markerIndex}`;
-  const cacheKey = JSON.stringify([style, settings, color, style === "blob" ? state.moduleSeed : null]);
+  const seed = wobbly || style === "blob" ? state.moduleSeed : null;
+  const cacheKey = JSON.stringify([style, settings, color, wobbly, seed]);
   if (finderPolygonCache.get(cacheIndex)?.key === cacheKey) return finderPolygonCache.get(cacheIndex).value;
-  const value = { ...getPatternPolygon(style, settings), color };
+  const shape = wobbly ? { geometry: getWobblyPolygonGeometry(settings, wobbly), properties: settings }
+    : getPatternPolygon(style, settings);
+  const value = { ...shape, color };
   finderPolygonCache.set(cacheIndex, { key: cacheKey, value });
   return value;
 }
 
 function finderPolygonCommand(x, y, markerIndex, part = "outer", scale = 1) {
   const { geometry } = getFinderPolygon(markerIndex, part);
-  const factor = (part === "outer" ? 7 : 3) * scale;
+  const factor = (part === "outer" ? OUTER_FINDER_SIZE : 3) * scale;
   return scaledPolygonCommand(geometry, x, y, factor);
 }
 
@@ -1028,6 +1041,30 @@ function getRegularPolygonGeometry(properties = state) {
   return geometry;
 }
 
+function getWobblyPolygonGeometry(properties, { wobble, edgeBend }) {
+  const base = getRegularPolygonGeometry({ ...properties, moduleCornerRadius: 0 });
+  if (wobble === 0 && edgeBend === 0) return base;
+
+  const maxShift = wobble / 100 * .35 / OUTER_FINDER_SIZE;
+  const maxBend = edgeBend / 100 * .25 / OUTER_FINDER_SIZE;
+  const vertices = [base.start, ...base.segments.map(({ end }) => end)].map(([x, y], index) => {
+    const direction = Math.PI * 2 * randomModuleFraction("wobblyContour", index, 0);
+    const shift = maxShift * (.4 + .6 * randomModuleFraction("wobblyContour", index, 1));
+    return [x + shift * Math.cos(direction), y + shift * Math.sin(direction)];
+  });
+  const segments = maxBend === 0 ? vertices.slice(1).map((end) => ({ type: "line", end })) : vertices.map(([x, y], index) => {
+    const end = vertices[(index + 1) % vertices.length];
+    const dx = end[0] - x;
+    const dy = end[1] - y;
+    const bend = maxBend * (2 * randomModuleFraction("wobblyContour", index, 2) - 1);
+    // Equal normal offsets on both handles place the peak at the midpoint.
+    const offset = 4 * bend / (3 * Math.hypot(dx, dy));
+    const point = (fraction) => [x + dx * fraction - dy * offset, y + dy * fraction + dx * offset];
+    return { type: "cubic", end, controls: [point(1 / 3), point(2 / 3)] };
+  });
+  return fitModulePath(vertices[0], segments, 1, { maxScale: 1 });
+}
+
 function moduleGeometryCommand(x, y, geometry) {
   return `M${formatNumber(x + geometry.start[0], 6)} ${formatNumber(y + geometry.start[1], 6)}${geometry.pathTail}`;
 }
@@ -1200,7 +1237,7 @@ function getFigureTemplate(figure, rotation) {
   return template;
 }
 
-function fitModulePath(start, segments, size) {
+function fitModulePath(start, segments, size, { maxScale = Infinity } = {}) {
   const points = [start, ...segments.map((segment) => segment.end)];
   let previous = start;
   // The extrema of each cubic keep the rendered contour within its cell and
@@ -1239,7 +1276,7 @@ function fitModulePath(start, segments, size) {
   const right = rightPoint[0];
   const top = topPoint[1];
   const bottom = bottomPoint[1];
-  const factor = size / Math.max(right - left, bottom - top);
+  const factor = Math.min(maxScale, size / Math.max(right - left, bottom - top));
   const normalize = ([x, y]) => [.5 + (x - (left + right) / 2) * factor, .5 + (y - (top + bottom) / 2) * factor];
   return {
     start: normalize(start),
@@ -2055,8 +2092,16 @@ function render() {
   }
   elements.cutOuterMarkerCorners.setAttribute("aria-pressed", String(finderSettings.cutOuterMarkerCorners));
   elements.outerMarkerCornersOnly.setAttribute("aria-pressed", String(finderSettings.outerMarkerCornersOnly));
-  syncFinderPolygonControls("outer");
-  syncFinderPolygonControls("inner");
+  const showWobbly = finderSettings.outerMarkerStyle === "wobbly-polygon" && !finderSettings.outerAsModules;
+  elements.outerWobblyProperties.hidden = !showWobbly;
+  outerWobblyControls.forEach(({ key, input, output }) => {
+    const value = finderSettings.outerWobbly[key];
+    input.disabled = !showWobbly;
+    input.value = value;
+    output.textContent = `${value}%`;
+  });
+  syncFinderPolygonControls("outer", finderSettings);
+  syncFinderPolygonControls("inner", finderSettings);
   elements.moduleColorCount.value = state.moduleColorCount;
   elements.moduleColorCount.setAttribute("aria-valuetext", `${state.moduleColorCount} ${state.moduleColorCount === 1 ? "color" : "colors"}`);
   elements.moduleColorCountValue.textContent = String(state.moduleColorCount);
@@ -2333,6 +2378,13 @@ elements.errorCorrection.addEventListener("change", () => {
 ["moduleStyle", "outerMarkerStyle", "innerMarkerStyle"].forEach((key) => {
   elements[key].addEventListener("change", () => {
     getAppearanceSettings(key)[key] = elements[key].value;
+    render();
+  });
+});
+
+outerWobblyControls.forEach(({ key, input }) => {
+  input.addEventListener("input", () => {
+    getFinderSettings().outerWobbly[key] = Number(input.value);
     render();
   });
 });
