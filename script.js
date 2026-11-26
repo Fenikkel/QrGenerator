@@ -19,6 +19,11 @@ const defaults = {
   moduleNoise: 36,
   moduleSmooth: 78,
   moduleRotation: 0,
+  moduleGooeyDensity: 4,
+  moduleGooeyBallSize: 50,
+  moduleGooeyBlendStrength: 70,
+  moduleGooeyLinkBallSize: 50,
+  moduleGooeyLinkDensity: 1,
   moduleMerge: "none",
   backgroundColor: "transparent",
   exportFormat: "svg",
@@ -60,6 +65,8 @@ const state = {
   moduleRandom: {
     moduleSides: false, moduleScale: false, moduleCornerRadius: false,
     moduleRotation: false, moduleNoise: false, moduleSmooth: false,
+    moduleGooeyDensity: false, moduleGooeyBallSize: false, moduleGooeyBlendStrength: false,
+    moduleGooeyLinkBallSize: false,
   },
   moduleRandomRanges: {
     moduleSides: { min: 3, max: 9 },
@@ -68,6 +75,10 @@ const state = {
     moduleRotation: { min: 0, max: 360 },
     moduleNoise: { min: 0, max: 100 },
     moduleSmooth: { min: 0, max: 100 },
+    moduleGooeyDensity: { min: 1, max: 9 },
+    moduleGooeyBallSize: { min: 25, max: 100 },
+    moduleGooeyBlendStrength: { min: 0, max: 100 },
+    moduleGooeyLinkBallSize: { min: 25, max: 100 },
   },
   logoDataUrl: "",
   logoAspectRatio: 1,
@@ -109,8 +120,10 @@ const elements = {
   moduleSeedValue: document.querySelector("#moduleSeedValue"),
   polygonProperties: document.querySelectorAll(".polygon-property"),
   blobProperties: document.querySelectorAll(".blob-property"),
+  gooeyProperties: document.querySelectorAll(".gooey-property"),
   shapeProperties: document.querySelectorAll(".shape-property"),
   figureProperties: document.querySelectorAll(".figure-property"),
+  moduleSizeField: document.querySelector(".module-size-field"),
   moduleFigureOptions: document.querySelectorAll("[data-module-figure]"),
   moduleSides: document.querySelector("#moduleSides"),
   moduleSidesValue: document.querySelector("#moduleSidesValue"),
@@ -120,6 +133,16 @@ const elements = {
   moduleNoiseValue: document.querySelector("#moduleNoiseValue"),
   moduleSmooth: document.querySelector("#moduleSmooth"),
   moduleSmoothValue: document.querySelector("#moduleSmoothValue"),
+  moduleGooeyDensity: document.querySelector("#moduleGooeyDensity"),
+  moduleGooeyDensityValue: document.querySelector("#moduleGooeyDensityValue"),
+  moduleGooeyBallSize: document.querySelector("#moduleGooeyBallSize"),
+  moduleGooeyBallSizeValue: document.querySelector("#moduleGooeyBallSizeValue"),
+  moduleGooeyBlendStrength: document.querySelector("#moduleGooeyBlendStrength"),
+  moduleGooeyBlendStrengthValue: document.querySelector("#moduleGooeyBlendStrengthValue"),
+  moduleGooeyLinkBallSize: document.querySelector("#moduleGooeyLinkBallSize"),
+  moduleGooeyLinkBallSizeValue: document.querySelector("#moduleGooeyLinkBallSizeValue"),
+  moduleGooeyLinkDensity: document.querySelector("#moduleGooeyLinkDensity"),
+  moduleGooeyLinkDensityValue: document.querySelector("#moduleGooeyLinkDensityValue"),
   individualCornersToggle: document.querySelector("#individualCornersToggle"),
   individualCornerControls: document.querySelector("#individualCornerControls"),
   moduleRotation: document.querySelector("#moduleRotation"),
@@ -198,6 +221,13 @@ const MODULE_RANGE_PROPERTIES = [
 const POLYGON_RANGE_PROPERTIES = MODULE_RANGE_PROPERTIES.filter(([key]) => !["moduleNoise", "moduleSmooth"].includes(key));
 const BLOB_RANGE_PROPERTIES = MODULE_RANGE_PROPERTIES.filter(([key]) => key !== "moduleCornerRadius");
 const FIGURE_RANGE_PROPERTIES = POLYGON_RANGE_PROPERTIES.filter(([key]) => ["moduleScale", "moduleRotation"].includes(key));
+const GOOEY_RANGE_PROPERTIES = [
+  ["moduleGooeyDensity", ""], ["moduleGooeyBallSize", "%"], ["moduleGooeyBlendStrength", "%"],
+];
+const ALL_MODULE_RANGE_PROPERTIES = [
+  ...MODULE_RANGE_PROPERTIES, ...GOOEY_RANGE_PROPERTIES,
+  ["moduleGooeyLinkBallSize", "%"], ["moduleGooeyLinkDensity", ""],
+];
 const MODULE_FIGURES = ["cross", "heart", "rounded-star"];
 const MODULE_RANDOM_PROPERTIES = {
   moduleSides: { min: 3, max: 9, salt: 0x9e3779b9 },
@@ -206,7 +236,12 @@ const MODULE_RANDOM_PROPERTIES = {
   moduleRotation: { min: 0, max: 360, salt: 0xdeadbeef },
   moduleNoise: { min: 0, max: 100, salt: 0x299f31d0 },
   moduleSmooth: { min: 0, max: 100, salt: 0xd1310ba6 },
+  moduleGooeyDensity: { min: 1, max: 9, salt: 0xbb67ae85 },
+  moduleGooeyBallSize: { min: 25, max: 100, salt: 0x3c6ef372 },
+  moduleGooeyBlendStrength: { min: 0, max: 100, salt: 0xa54ff53a },
+  moduleGooeyLinkBallSize: { min: 25, max: 100, salt: 0x510e527f },
   moduleBlobContour: { salt: 0x98dfb5ac },
+  moduleGooeyZones: { salt: 0x1f83d9ab },
   wobblyContour: { salt: 0xa13b1f37 },
   gooeyContour: { salt: 0x9b05688c },
   moduleColor: { salt: 0xa4093822 },
@@ -250,6 +285,7 @@ const QR_STRUCTURE_REGIONS = [
 const capacityCache = new Map();
 let regularPolygonCache;
 let figureGeometryCache;
+let gooeyModuleCache;
 const figureTemplateCache = new Map();
 let moduleShapeCache = { key: "", cells: new Map(), variants: new Map() };
 let toastTimer;
@@ -609,7 +645,7 @@ function syncAlignmentControls() {
     return (!finder.innerAsModules && finder.innerMarkerStyle === "blob")
       || (!finder.outerAsModules && ["wobbly-polygon", "gooey-polygon"].includes(finder.outerMarkerStyle));
   });
-  elements.moduleSeedField.hidden = state.moduleStyle !== "blob" && !hasRandomModuleProperties()
+  elements.moduleSeedField.hidden = !["blob", "gooey"].includes(state.moduleStyle) && !hasRandomModuleProperties()
     && state.moduleColorCount === 1 && !randomAlignmentColors && !hasSeededFinder;
 }
 
@@ -662,10 +698,13 @@ function finderPolygonCommand(x, y, markerIndex, part = "outer", scale = 1) {
 
 function gooeyPolygonCommand(loops, x, y, scale) {
   const position = ([px, py]) => `${formatNumber(x + px * scale, 5)} ${formatNumber(y + py * scale, 5)}`;
-  const midpoint = ([ax, ay], [bx, by]) => [(ax + bx) / 2, (ay + by) / 2];
-  return loops.map((loop) => `M${position(midpoint(loop.at(-1), loop[0]))}${loop.map((point, index) => (
-    `Q${position(point)} ${position(midpoint(point, loop[(index + 1) % loop.length]))}`
+  return loops.map((loop) => `M${position(gooeyMidpoint(loop.at(-1), loop[0]))}${loop.map((point, index) => (
+    `Q${position(point)} ${position(gooeyMidpoint(point, loop[(index + 1) % loop.length]))}`
   )).join("")}Z`).join("");
+}
+
+function gooeyMidpoint([ax, ay], [bx, by]) {
+  return [(ax + bx) / 2, (ay + by) / 2];
 }
 
 function scaledPolygonCommand(geometry, x, y, factor) {
@@ -835,6 +874,7 @@ function getModuleRangeProperties(style = state.moduleStyle) {
   if (style === "regular-polygon") return POLYGON_RANGE_PROPERTIES;
   if (style === "blob") return BLOB_RANGE_PROPERTIES;
   if (style === "figure") return FIGURE_RANGE_PROPERTIES;
+  if (style === "gooey") return GOOEY_RANGE_PROPERTIES;
   return [];
 }
 
@@ -892,7 +932,8 @@ function getModuleGeometry(row, column, style = state.moduleStyle) {
 }
 
 function getModuleGeometryResolver(style = state.moduleStyle) {
-  const buildGeometry = style === "figure" ? getFigureGeometry : style === "blob" ? getBlobGeometry : getRegularPolygonGeometry;
+  const buildGeometry = style === "gooey" ? getGooeyModuleGeometry
+    : style === "figure" ? getFigureGeometry : style === "blob" ? getBlobGeometry : getRegularPolygonGeometry;
   if (!hasRandomModuleProperties(style)) {
     const geometry = buildGeometry(style === "figure" ? {
       moduleFigure: state.moduleFigures[0], moduleScale: state.moduleScale, moduleRotation: state.moduleRotation,
@@ -1134,7 +1175,7 @@ function moduleGeometryCommand(x, y, geometry) {
 }
 
 function supportsModuleMerge(style) {
-  return style === "regular-polygon" || style === "blob";
+  return style === "regular-polygon" || style === "blob" || style === "gooey";
 }
 
 function mergedModulesPath(code, quietZone, style) {
@@ -1146,16 +1187,23 @@ function mergedModulesPath(code, quietZone, style) {
   const squareGroups = state.moduleMerge === "square-groups";
   const horizontal = squareGroups || state.moduleMerge === "all" || state.moduleMerge === "horizontal";
   const vertical = squareGroups || state.moduleMerge === "all" || state.moduleMerge === "vertical";
+  const fusedCells = style === "gooey" && (horizontal || vertical) ? new Uint8Array(count * count) : null;
   for (let row = 0; row < count; row += 1) {
     for (let column = 0; column < count; column += 1) {
       if (!shouldRenderModule(code, row, column, quietZone, null, style)) continue;
       const geometry = resolveGeometry(row, column);
       if (moduleIntersectsBox(row, column, quietZone, exclusionBox, style, geometry)) continue;
       geometries[row * count + column] = geometry;
-      commands.push(moduleGeometryCommand(column + quietZone, row + quietZone, geometry));
+      if (!fusedCells) commands.push(moduleGeometryCommand(column + quietZone, row + quietZone, geometry));
     }
   }
   if (!horizontal && !vertical) return commands.join("");
+  const randomLinkSize = state.moduleRandom.moduleGooeyLinkBallSize;
+  const fixedLinkSize = state.moduleGooeyLinkBallSize;
+  const linkDensity = state.moduleGooeyLinkDensity;
+  const linkRange = state.moduleRandomRanges.moduleGooeyLinkBallSize;
+  const linkSizeSettings = randomLinkSize ? `${linkRange.min}-${linkRange.max}` : fixedLinkSize;
+  const linkSettings = `${linkDensity}:${linkSizeSettings}`;
   const squareConnections = squareGroups ? new Uint8Array(count * count) : null;
   if (squareGroups) {
     // Every internal edge in a full n×n square (n >= 2) belongs to a full
@@ -1171,36 +1219,62 @@ function mergedModulesPath(code, quietZone, style) {
     }
   }
   const appendBridge = (row, column, bridge) => {
+    if (!bridge) return false;
     const x = column + quietZone;
     const y = row + quietZone;
     const bounds = bridge.bounds;
-    if (rectangleIntersectsBox(x + bounds.x, y + bounds.y, bounds.width, bounds.height, exclusionBox)) return;
+    if (rectangleIntersectsBox(x + bounds.x, y + bounds.y, bounds.width, bounds.height, exclusionBox)) return false;
     commands.push(`M${formatNumber(x + bridge.start[0], 6)} ${formatNumber(y + bridge.start[1], 6)}${bridge.pathTail}`);
+    return true;
   };
-  const bridgeFor = (first, second, direction) => {
-    if (first === second && first.bridges?.[direction]) return first.bridges[direction];
+  const bridgeFor = (first, second, direction, row, column) => {
+    if (style === "gooey") {
+      if (first.gooeyBridges?.settings !== linkSettings) {
+        first.gooeyBridges = { settings: linkSettings, pairs: new WeakMap() };
+      }
+      const cache = first.gooeyBridges.pairs;
+      let bridges = cache.get(second);
+      if (!bridges) cache.set(second, bridges = {});
+      const toRight = direction === "horizontal";
+      // Hash the edge midpoint on a grid with twice the resolution of the modules.
+      const linkSize = randomLinkSize
+        ? randomModuleValue("moduleGooeyLinkBallSize", 2 * row + Number(!toRight), 2 * column + Number(toRight))
+        : fixedLinkSize;
+      const key = `${direction}:${linkSize}`;
+      return bridges[key] ??= getGooeyContourGeometry(traceGooeyModulePair(first, second, direction, linkSize, linkDensity));
+    }
+    if (first === second && first.bridges && Object.hasOwn(first.bridges, direction)) return first.bridges[direction];
     const a = first.supportPoints;
     const b = second.supportPoints;
-    const bridge = polygonBridgeGeometry(direction === "horizontal"
+    const vertices = direction === "horizontal"
       ? [a.top, [b.top[0] + 1, b.top[1]], [b.bottom[0] + 1, b.bottom[1]], a.bottom]
-      : [a.left, a.right, [b.right[0], b.right[1] + 1], [b.left[0], b.left[1] + 1]]);
+      : [a.left, a.right, [b.right[0], b.right[1] + 1], [b.left[0], b.left[1] + 1]];
+    const bridge = polygonBridgeGeometry(vertices);
     if (first === second) (first.bridges ??= {})[direction] = bridge;
     return bridge;
   };
   for (let row = 0; row < count; row += 1) {
     for (let column = 0; column < count; column += 1) {
-      const geometry = geometries[row * count + column];
+      const index = row * count + column;
+      const geometry = geometries[index];
       if (!geometry) continue;
-      const right = geometries[row * count + column + 1];
-      const down = geometries[(row + 1) * count + column];
-      if (horizontal && column + 1 < count && right && (!squareGroups || (squareConnections[row * count + column] & 1))) {
-        appendBridge(row, column, bridgeFor(geometry, right, "horizontal"));
+      const right = geometries[index + 1];
+      const down = geometries[index + count];
+      if (horizontal && column + 1 < count && right && (!squareGroups || (squareConnections[index] & 1))) {
+        const merged = appendBridge(row, column, bridgeFor(geometry, right, "horizontal", row, column));
+        if (fusedCells && merged) fusedCells[index] = fusedCells[index + 1] = 1;
       }
-      if (vertical && row + 1 < count && down && (!squareGroups || (squareConnections[row * count + column] & 2))) {
-        appendBridge(row, column, bridgeFor(geometry, down, "vertical"));
+      if (vertical && row + 1 < count && down && (!squareGroups || (squareConnections[index] & 2))) {
+        const merged = appendBridge(row, column, bridgeFor(geometry, down, "vertical", row, column));
+        if (fusedCells && merged) fusedCells[index] = fusedCells[index + count] = 1;
       }
     }
   }
+  if (fusedCells) geometries.forEach((geometry, index) => {
+    if (geometry && !fusedCells[index]) {
+      commands.push(moduleGeometryCommand(index % count + quietZone, Math.floor(index / count) + quietZone, geometry));
+    }
+  });
   return commands.join("");
 }
 
@@ -1341,7 +1415,9 @@ function fitModulePath(start, segments, size, { maxScale = Infinity } = {}) {
   const top = topPoint[1];
   const bottom = bottomPoint[1];
   const factor = Math.min(maxScale, size / Math.max(right - left, bottom - top));
-  const normalize = ([x, y]) => [.5 + (x - (left + right) / 2) * factor, .5 + (y - (top + bottom) / 2) * factor];
+  const centerX = (left + right) / 2;
+  const centerY = (top + bottom) / 2;
+  const normalize = ([x, y]) => [.5 + (x - centerX) * factor, .5 + (y - centerY) * factor];
   return {
     start: normalize(start),
     segments: segments.map((segment) => ({
@@ -1420,11 +1496,50 @@ function getFigureGeometry(properties = state) {
   return geometry;
 }
 
-function modulePathTail({ start, segments }) {
+function getGooeyModuleGeometry(properties = state) {
+  const { moduleGooeyDensity: density, moduleGooeyBallSize: ballSize, moduleGooeyBlendStrength: blendStrength } = properties;
+  const key = `${state.moduleSeed}:${density}:${ballSize}:${blendStrength}`;
+  if (gooeyModuleCache?.key === key) return gooeyModuleCache.geometry;
+
+  const random = (zone) => randomModuleFraction("moduleGooeyZones", 0, zone);
+  const { contours, fieldAt, blend } = createGooeyModuleField({ density, ballSize, blendStrength }, random);
+  const geometry = { ...getGooeyContourGeometry(contours), fieldAt, blend };
+  gooeyModuleCache = { key, geometry };
+  return geometry;
+}
+
+function getGooeyContourGeometry(contours) {
+  const loops = contours.map((loop) => simplifyGooeyModuleLoop(loop));
+  const loopStart = (loop) => gooeyMidpoint(loop.at(-1), loop[0]);
+  const start = loopStart(loops[0]);
+  let previous = start;
+  const relative = ([x, y]) => `${formatNumber(x - previous[0], 4)} ${formatNumber(y - previous[1], 4)}`;
+  const pathTail = loops.map((loop, loopIndex) => {
+    const first = loopStart(loop);
+    const move = loopIndex ? `m${relative(first)}` : "";
+    previous = first;
+    const curves = loop.map((point, index) => {
+      const end = gooeyMidpoint(point, loop[(index + 1) % loop.length]);
+      const curve = `q${relative(point)} ${relative(end)}`;
+      previous = end;
+      return curve;
+    }).join("");
+    return move + curves + "Z";
+  }).join("");
+
+  const points = loops.flat();
+  const xs = points.map(([x]) => x);
+  const ys = points.map(([, y]) => y);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return { start, pathTail, bounds: { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y } };
+}
+
+function modulePathTail({ start, segments }, precision = 6) {
   let previous = start;
   return segments.map((segment) => {
     const coordinates = [...(segment.controls || []), segment.end].map(([x, y]) => (
-      `${formatNumber(x - previous[0], 6)} ${formatNumber(y - previous[1], 6)}`
+      `${formatNumber(x - previous[0], precision)} ${formatNumber(y - previous[1], precision)}`
     )).join(" ");
     previous = segment.end;
     return `${segment.type === "cubic" ? "c" : "l"}${coordinates}`;
@@ -2201,12 +2316,19 @@ function render() {
     controls.hexInput.value = getModuleColor(index).toUpperCase();
   });
   elements.moduleStyle.value = state.moduleStyle;
+  const showModuleGooey = state.moduleStyle === "gooey";
+  const showGooeyLinks = showModuleGooey && state.moduleMerge !== "none";
+  elements.moduleSizeField.hidden = showModuleGooey;
+  elements.gooeyProperties.forEach((field) => { field.hidden = !showModuleGooey; });
+  elements.moduleGooeyLinkBallSize.closest(".range-field").hidden = !showGooeyLinks;
+  elements.moduleGooeyLinkDensity.closest(".range-field").hidden = !showGooeyLinks;
+  elements.moduleGooeyLinkDensity.disabled = !showGooeyLinks;
   const supportsMerge = supportsModuleMerge(state.moduleStyle);
   const randomProperties = getModuleRangeProperties();
-  elements.moduleSides.closest(".range-field").hidden = !supportsMerge;
+  elements.moduleSides.closest(".range-field").hidden = !supportsMerge || showModuleGooey;
   elements.polygonProperties.forEach((field) => { field.hidden = state.moduleStyle !== "regular-polygon"; });
   elements.blobProperties.forEach((field) => { field.hidden = state.moduleStyle !== "blob"; });
-  elements.shapeProperties.forEach((field) => { field.hidden = !supportsMerge && state.moduleStyle !== "figure"; });
+  elements.shapeProperties.forEach((field) => { field.hidden = showModuleGooey || (!supportsMerge && state.moduleStyle !== "figure"); });
   elements.moduleMergeField.hidden = !supportsMerge;
   elements.figureProperties.forEach((field) => { field.hidden = state.moduleStyle !== "figure"; });
   elements.moduleFigureOptions.forEach((button) => {
@@ -2214,7 +2336,8 @@ function render() {
   });
   elements.moduleRandomOptions.forEach((button) => {
     const key = button.dataset.moduleRandom;
-    const supportsRandom = randomProperties.some(([property]) => property === key);
+    const supportsRandom = key === "moduleGooeyLinkBallSize"
+      ? showGooeyLinks : randomProperties.some(([property]) => property === key);
     const isRandom = supportsRandom && state.moduleRandom[key];
     const individual = key === "moduleCornerRadius" && supportsRandom && state.individualCorners;
     const steps = state.moduleSteps[key];
@@ -2223,7 +2346,7 @@ function render() {
     button.hidden = !supportsRandom;
     button.setAttribute("aria-pressed", String(state.moduleRandom[key]));
     elements[key].closest(".range-control").hidden = isRandom || individual || discrete;
-    elements[key].disabled = isRandom || individual || discrete;
+    elements[key].disabled = !supportsRandom || isRandom || individual || discrete;
     const controls = moduleRandomControls.get(key);
     controls.group.hidden = !isRandom || individual || discrete;
     controls.min.disabled = !isRandom || individual || discrete;
@@ -2249,10 +2372,11 @@ function render() {
   elements.moduleMergeOptions.forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.moduleMerge === state.moduleMerge));
   });
-  MODULE_RANGE_PROPERTIES.forEach(([key, suffix]) => {
+  ALL_MODULE_RANGE_PROPERTIES.forEach(([key, suffix]) => {
     elements[key].value = state[key];
     elements[`${key}Value`].textContent = `${state[key]}${suffix}`;
     const controls = moduleRandomControls.get(key);
+    if (!controls) return;
     const range = state.moduleRandomRanges[key];
     const limits = MODULE_RANDOM_PROPERTIES[key];
     syncRandomRangeControls(controls, range, limits, suffix);
@@ -2591,7 +2715,7 @@ elements.alignmentAsModules.addEventListener("click", () => {
   render();
 });
 
-MODULE_RANGE_PROPERTIES.forEach(([key]) => {
+ALL_MODULE_RANGE_PROPERTIES.forEach(([key]) => {
   elements[key].addEventListener("input", () => {
     state[key] = Number(elements[key].value);
     render();
