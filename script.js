@@ -39,6 +39,7 @@ const state = {
   finderPatterns: null,
   outerPolygon: createFinderPolygonSettings(),
   outerWobbly: { wobble: 55, edgeBend: 0, cornerRadius: 0 },
+  outerGooey: { density: 56, sizeVariation: 60, spacingVariation: 55, pathDeviation: 55, blendStrength: 80 },
   innerPolygon: { ...createFinderPolygonSettings(), moduleNoise: defaults.moduleNoise, moduleSmooth: defaults.moduleSmooth },
   alignmentAsModules: true,
   alignment: createAlignmentSettings(),
@@ -139,6 +140,7 @@ const elements = {
   innerMarkerControls: document.querySelector("#innerMarkerControls"),
   outerMarkerStyle: document.querySelector("#outerMarkerStyle"),
   outerWobblyProperties: document.querySelector("#outerWobblyProperties"),
+  outerGooeyProperties: document.querySelector("#outerGooeyProperties"),
   cutOuterMarkerCorners: document.querySelector("#cutOuterMarkerCorners"),
   outerMarkerCornersOnly: document.querySelector("#outerMarkerCornersOnly"),
   innerMarkerStyle: document.querySelector("#innerMarkerStyle"),
@@ -179,7 +181,7 @@ const OUTER_FINDER_POLYGON_TRANSFORM = { moduleScale: 100, moduleRotation: 0 };
 const FINDER_PROPERTIES = [
   "outerAsModules", "innerAsModules", "outerMarkerStyle", "innerMarkerStyle",
   "outerMarkerColor", "innerMarkerColor", "cutOuterMarkerCorners", "outerMarkerCornersOnly",
-  "outerPolygon", "outerWobbly", "innerPolygon",
+  "outerPolygon", "outerWobbly", "outerGooey", "innerPolygon",
 ];
 const sectionDefaults = {
   module: structuredClone(Object.fromEntries([
@@ -206,6 +208,7 @@ const MODULE_RANDOM_PROPERTIES = {
   moduleSmooth: { min: 0, max: 100, salt: 0xd1310ba6 },
   moduleBlobContour: { salt: 0x98dfb5ac },
   wobblyContour: { salt: 0xa13b1f37 },
+  gooeyContour: { salt: 0x9b05688c },
   moduleColor: { salt: 0xa4093822 },
   moduleFigure: { salt: 0x082efa98 },
   alignmentOuterColor: { salt: 0x452821e6 },
@@ -224,6 +227,9 @@ const outerPolygonControls = createFinderPolygonControls("outer", {
 });
 const outerWobblyControls = Array.from(elements.outerWobblyProperties.querySelectorAll("[data-wobbly]"), (input) => ({
   key: input.dataset.wobbly, input, output: input.parentElement.querySelector("output"),
+}));
+const outerGooeyControls = Array.from(elements.outerGooeyProperties.querySelectorAll("[data-gooey]"), (input) => ({
+  key: input.dataset.gooey, input, output: input.parentElement.querySelector("output"),
 }));
 const innerPolygonControls = createFinderPolygonControls("inner", { rangeProperties: MODULE_RANGE_PROPERTIES });
 const finderPolygonControls = { outer: outerPolygonControls, inner: innerPolygonControls };
@@ -511,7 +517,7 @@ function createFinderPolygonControls(part, {
 function syncFinderPolygonControls(part, finder = getFinderSettings(), editor = finderPolygonControls[part]) {
   const settings = finder[`${part}Polygon`];
   const style = finder[`${part}MarkerStyle`];
-  const wobbly = style === "wobbly-polygon";
+  const sidesOnly = style === "wobbly-polygon" || style === "gooey-polygon";
   const activeProperties = getModuleRangeProperties(style);
   const hasIndividualCorners = style === "regular-polygon" && settings.individualCorners;
   editor.figureField.hidden = style !== "figure";
@@ -521,7 +527,7 @@ function syncFinderPolygonControls(part, finder = getFinderSettings(), editor = 
   editor.rangeProperties.forEach(([key, suffix]) => {
     const control = editor[key];
     const fixed = style === "regular-polygon" && Object.hasOwn(editor.fixedPolygonProperties, key);
-    control.field.hidden = wobbly ? key !== "moduleSides" : fixed || !activeProperties.some(([property]) => property === key);
+    control.field.hidden = sidesOnly ? key !== "moduleSides" : fixed || !activeProperties.some(([property]) => property === key);
     const individual = key === "moduleCornerRadius" && hasIndividualCorners;
     control.input.value = settings[key];
     control.output.textContent = `${settings[key]}${suffix}`;
@@ -601,7 +607,7 @@ function syncAlignmentControls() {
   const hasSeededFinder = [0, 1, 2].some((index) => {
     const finder = getFinderSettings(index);
     return (!finder.innerAsModules && finder.innerMarkerStyle === "blob")
-      || (!finder.outerAsModules && finder.outerMarkerStyle === "wobbly-polygon");
+      || (!finder.outerAsModules && ["wobbly-polygon", "gooey-polygon"].includes(finder.outerMarkerStyle));
   });
   elements.moduleSeedField.hidden = state.moduleStyle !== "blob" && !hasRandomModuleProperties()
     && state.moduleColorCount === 1 && !randomAlignmentColors && !hasSeededFinder;
@@ -621,16 +627,27 @@ function getFinderPolygon(markerIndex, part = "outer") {
   const finder = getFinderSettings(markerIndex);
   const style = finder[`${part}MarkerStyle`];
   const wobbly = style === "wobbly-polygon" ? finder.outerWobbly : null;
+  const gooey = style === "gooey-polygon" ? finder.outerGooey : null;
   const polygon = finder[`${part}Polygon`];
-  const settings = part === "outer" && (style === "regular-polygon" || wobbly)
+  const settings = part === "outer" && (style === "regular-polygon" || wobbly || gooey)
     ? { ...polygon, ...OUTER_FINDER_POLYGON_TRANSFORM } : polygon;
   const color = finder[`${part}MarkerColor`];
   const cacheIndex = `${part}:${markerIndex}`;
-  const seed = wobbly || style === "blob" ? state.moduleSeed : null;
-  const cacheKey = JSON.stringify([style, settings, color, wobbly, seed]);
+  const seed = wobbly || gooey || style === "blob" ? state.moduleSeed : null;
+  const cacheKey = JSON.stringify([style, settings, color, wobbly ?? gooey, seed]);
   if (finderPolygonCache.get(cacheIndex)?.key === cacheKey) return finderPolygonCache.get(cacheIndex).value;
-  const shape = wobbly ? { geometry: getWobblyPolygonGeometry(settings, wobbly), properties: settings }
-    : getPatternPolygon(style, settings);
+  let shape;
+  if (gooey) {
+    const guide = getRegularPolygonGeometry({ ...settings, moduleCornerRadius: 0 });
+    const vertices = [guide.start, ...guide.segments.map(({ end }) => end)]
+      .map((point) => point.map((value) => value * OUTER_FINDER_SIZE));
+    const random = (index, channel) => randomModuleFraction("gooeyContour", markerIndex, index, channel);
+    shape = { geometry: { loops: createGooeyPolygonLoops(vertices, gooey, random) }, properties: settings };
+  } else if (wobbly) {
+    shape = { geometry: getWobblyPolygonGeometry(settings, wobbly), properties: settings };
+  } else {
+    shape = getPatternPolygon(style, settings);
+  }
   const value = { ...shape, color };
   finderPolygonCache.set(cacheIndex, { key: cacheKey, value });
   return value;
@@ -638,8 +655,17 @@ function getFinderPolygon(markerIndex, part = "outer") {
 
 function finderPolygonCommand(x, y, markerIndex, part = "outer", scale = 1) {
   const { geometry } = getFinderPolygon(markerIndex, part);
+  if (geometry.loops) return gooeyPolygonCommand(geometry.loops, x, y, scale);
   const factor = (part === "outer" ? OUTER_FINDER_SIZE : 3) * scale;
   return scaledPolygonCommand(geometry, x, y, factor);
+}
+
+function gooeyPolygonCommand(loops, x, y, scale) {
+  const position = ([px, py]) => `${formatNumber(x + px * scale, 5)} ${formatNumber(y + py * scale, 5)}`;
+  const midpoint = ([ax, ay], [bx, by]) => [(ax + bx) / 2, (ay + by) / 2];
+  return loops.map((loop) => `M${position(midpoint(loop.at(-1), loop[0]))}${loop.map((point, index) => (
+    `Q${position(point)} ${position(midpoint(point, loop[(index + 1) % loop.length]))}`
+  )).join("")}Z`).join("");
 }
 
 function scaledPolygonCommand(geometry, x, y, factor) {
@@ -1620,6 +1646,10 @@ function hasOuterMarkerClip(markerIndex = state.selectedFinderPattern) {
   return settings.cutOuterMarkerCorners || settings.outerMarkerCornersOnly;
 }
 
+function getOuterMarkerOutset(finder) {
+  return !finder.outerAsModules && finder.outerMarkerStyle === "gooey-polygon" ? GOOEY_OUTSET : 0;
+}
+
 function getShapeRendering() {
   const squareMarkers = [0, 1, 2].every((markerIndex) => {
     const settings = getFinderSettings(markerIndex);
@@ -1630,16 +1660,19 @@ function getShapeRendering() {
 }
 
 function outerMarkerClipCommand(x, y, scale = 1, markerIndex = state.selectedFinderPattern) {
-  const third = 7 * scale / 3;
+  const finder = getFinderSettings(markerIndex);
+  const size = OUTER_FINDER_SIZE * scale;
+  const third = size / 3;
+  const outset = getOuterMarkerOutset(finder) * scale;
   const nearX = formatNumber(x + third, 4);
   const farX = formatNumber(x + 2 * third, 4);
   const nearY = formatNumber(y + third, 4);
   const farY = formatNumber(y + 2 * third, 4);
-  const left = formatNumber(x, 4);
-  const right = formatNumber(x + 7 * scale, 4);
-  const top = formatNumber(y, 4);
-  const bottom = formatNumber(y + 7 * scale, 4);
-  if (getFinderSettings(markerIndex).outerMarkerCornersOnly) {
+  const left = formatNumber(x - outset, 4);
+  const right = formatNumber(x + size + outset, 4);
+  const top = formatNumber(y - outset, 4);
+  const bottom = formatNumber(y + size + outset, 4);
+  if (finder.outerMarkerCornersOnly) {
     return `M${left} ${top}H${nearX}V${nearY}H${left}Z`
       + `M${farX} ${top}H${right}V${nearY}H${farX}Z`
       + `M${left} ${farY}H${nearX}V${bottom}H${left}Z`
@@ -1650,18 +1683,27 @@ function outerMarkerClipCommand(x, y, scale = 1, markerIndex = state.selectedFin
 
 function getMarkerClips(code) {
   return markerPositions(code).flatMap(([x, y], markerIndex) => {
-    if (getFinderSettings(markerIndex).outerAsModules) return [];
+    const finder = getFinderSettings(markerIndex);
+    if (finder.outerAsModules) return [];
     const cuts = hasOuterMarkerClip(markerIndex);
-    return [
-      ...(cuts ? [{ id: `outer-marker-cut-${markerIndex}`, d: outerMarkerClipCommand(x, y, 1, markerIndex) }] : []),
-      { id: `outer-marker-shape-${markerIndex}`, d: finderPolygonCommand(x, y, markerIndex), ...(cuts ? { clip: `outer-marker-cut-${markerIndex}` } : {}) },
-    ];
+    const cutId = `outer-marker-cut-${markerIndex}`;
+    const clips = cuts ? [{ id: cutId, d: outerMarkerClipCommand(x, y, 1, markerIndex) }] : [];
+    if (finder.outerMarkerStyle !== "gooey-polygon") {
+      clips.push({ id: `outer-marker-shape-${markerIndex}`, d: finderPolygonCommand(x, y, markerIndex), ...(cuts ? { clip: cutId } : {}) });
+    }
+    return clips;
   });
 }
 
 function getMarkerShape(x, y, markerIndex, part, scale = 1) {
-  const { properties, color } = getFinderPolygon(markerIndex, part);
+  const { geometry, properties, color } = getFinderPolygon(markerIndex, part);
   if (part === "outer") {
+    if (geometry.loops) {
+      return { tag: "path", attributes: {
+        d: gooeyPolygonCommand(geometry.loops, x, y, scale), fill: color, "fill-rule": "evenodd",
+        ...(hasOuterMarkerClip(markerIndex) ? { "clip-path": `url(#outer-marker-cut-${markerIndex})` } : {}),
+      } };
+    }
     return { tag: "path", attributes: {
       d: finderPolygonCommand(x, y, markerIndex, part, scale), fill: "none", stroke: color,
       "stroke-width": 2 * properties.moduleScale / 100 * scale,
@@ -2138,6 +2180,14 @@ function render() {
     input.value = value;
     output.textContent = `${value}%`;
   });
+  const showGooey = finderSettings.outerMarkerStyle === "gooey-polygon" && !finderSettings.outerAsModules;
+  elements.outerGooeyProperties.hidden = !showGooey;
+  outerGooeyControls.forEach(({ key, input, output }) => {
+    const value = finderSettings.outerGooey[key];
+    input.disabled = !showGooey;
+    input.value = value;
+    output.textContent = key === "density" ? String(value) : `${value}%`;
+  });
   syncFinderPolygonControls("outer", finderSettings);
   syncFinderPolygonControls("inner", finderSettings);
   elements.moduleColorCount.value = state.moduleColorCount;
@@ -2423,6 +2473,13 @@ elements.errorCorrection.addEventListener("change", () => {
 outerWobblyControls.forEach(({ key, input }) => {
   input.addEventListener("input", () => {
     getFinderSettings().outerWobbly[key] = Number(input.value);
+    render();
+  });
+});
+
+outerGooeyControls.forEach(({ key, input }) => {
+  input.addEventListener("input", () => {
+    getFinderSettings().outerGooey[key] = Number(input.value);
     render();
   });
 });
@@ -2958,9 +3015,9 @@ function drawCanvasMarkers(context, code, moduleSize, offset, quietZone) {
     ["outer", "inner"].forEach((part) => {
       if (getFinderSettings(markerIndex)[`${part}AsModules`]) return;
       const { tag, attributes } = getMarkerShape(x, y, markerIndex, part, moduleSize);
-      const draw = part === "outer" ? "stroke" : "fill";
+      const draw = attributes.stroke ? "stroke" : "fill";
       context.save();
-      if (part === "outer") {
+      if (attributes.stroke) {
         context.strokeStyle = attributes.stroke;
         context.lineWidth = attributes["stroke-width"];
         context.lineJoin = attributes["stroke-linejoin"];
@@ -2972,7 +3029,9 @@ function drawCanvasMarkers(context, code, moduleSize, offset, quietZone) {
         context.clip(new Path2D(outerMarkerClipCommand(x, y, moduleSize, markerIndex)));
       }
       if (tag === "path") {
-        context[draw](new Path2D(attributes.d));
+        const path = new Path2D(attributes.d);
+        if (attributes["fill-rule"]) context.fill(path, attributes["fill-rule"]);
+        else context[draw](path);
       } else {
         context.beginPath();
         if (tag === "circle") {
@@ -3052,9 +3111,13 @@ function drawQrToCanvas(context, code, size) {
     ? QUIET_ZONE
     : Math.max(0, Math.floor((size - count) / 2));
   const dimension = count + quietZone * 2;
-  const integerModuleSize = Math.floor(size / dimension);
-  const moduleSize = integerModuleSize || size / dimension;
-  const offset = integerModuleSize ? Math.floor((size - moduleSize * dimension) / 2) : 0;
+  // At small export sizes the QR can have no quiet zone to absorb the Gooey outline.
+  const outset = quietZone === 0 ? Math.max(...[0, 1, 2].map((index) => getOuterMarkerOutset(getFinderSettings(index)))) : 0;
+  const drawingDimension = dimension + 2 * outset;
+  const integerModuleSize = Math.floor(size / drawingDimension);
+  const moduleSize = integerModuleSize || size / drawingDimension;
+  const margin = (size - moduleSize * dimension) / 2;
+  const offset = outset > 0 ? margin : integerModuleSize ? Math.floor(margin) : 0;
   const exclusionBox = state.clearLogoArea ? getLogoBox(code, quietZone) : null;
 
   context.clearRect(0, 0, size, size);

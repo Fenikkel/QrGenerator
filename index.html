@@ -10,7 +10,8 @@
     <link rel="stylesheet" href="styles.css?v=20261124-1">
     <script src="vendor/qrcode.js?v=20261105-1" defer></script>
     <script src="logo-area.js?v=20261105-1" defer></script>
-    <script src="script.js?v=20261126-8" defer></script>
+    <script src="gooey-polygon.js?v=20261126-11" defer></script>
+    <script src="script.js?v=20261126-9" defer></script>
   </head>
   <body>
     <main>
@@ -297,6 +298,7 @@
                     <select id="outerMarkerStyle" aria-label="Outer style">
                       <option value="regular-polygon" selected>Regular polygon</option>
                       <option value="wobbly-polygon">Wobbly polygon</option>
+                      <option value="gooey-polygon">Gooey Polygon</option>
                       <option value="figure">Figures</option>
                     </select>
                     <div id="outerPolygonProperties" class="finder-polygon-properties"></div>
@@ -320,6 +322,43 @@
                         <span class="range-control">
                           <input id="outerWobblyCornerRadius" data-wobbly="cornerRadius" type="range" min="0" max="100" step="1" value="0">
                           <output for="outerWobblyCornerRadius">0%</output>
+                        </span>
+                      </div>
+                    </div>
+                    <div id="outerGooeyProperties" class="finder-polygon-properties" hidden>
+                      <div class="range-field">
+                        <div class="property-heading"><label for="outerGooeyDensity">Density</label></div>
+                        <span class="range-control">
+                          <input id="outerGooeyDensity" data-gooey="density" type="range" min="8" max="76" step="1" value="56">
+                          <output for="outerGooeyDensity">56</output>
+                        </span>
+                      </div>
+                      <div class="range-field">
+                        <div class="property-heading"><label for="outerGooeySizeVariation">Size variation</label></div>
+                        <span class="range-control">
+                          <input id="outerGooeySizeVariation" data-gooey="sizeVariation" type="range" min="0" max="100" step="1" value="60">
+                          <output for="outerGooeySizeVariation">60%</output>
+                        </span>
+                      </div>
+                      <div class="range-field">
+                        <div class="property-heading"><label for="outerGooeySpacingVariation">Spacing variation</label></div>
+                        <span class="range-control">
+                          <input id="outerGooeySpacingVariation" data-gooey="spacingVariation" type="range" min="0" max="100" step="1" value="55">
+                          <output for="outerGooeySpacingVariation">55%</output>
+                        </span>
+                      </div>
+                      <div class="range-field">
+                        <div class="property-heading"><label for="outerGooeyPathDeviation">Path deviation</label></div>
+                        <span class="range-control">
+                          <input id="outerGooeyPathDeviation" data-gooey="pathDeviation" type="range" min="0" max="100" step="1" value="55">
+                          <output for="outerGooeyPathDeviation">55%</output>
+                        </span>
+                      </div>
+                      <div class="range-field">
+                        <div class="property-heading"><label for="outerGooeyBlendStrength">Blend strength</label></div>
+                        <span class="range-control">
+                          <input id="outerGooeyBlendStrength" data-gooey="blendStrength" type="range" min="0" max="100" step="1" value="80">
+                          <output for="outerGooeyBlendStrength">80%</output>
                         </span>
                       </div>
                     </div>
