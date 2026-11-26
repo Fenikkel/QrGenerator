@@ -38,7 +38,7 @@ const state = {
   selectedFinderPattern: 0,
   finderPatterns: null,
   outerPolygon: createFinderPolygonSettings(),
-  outerWobbly: { wobble: 55, edgeBend: 0 },
+  outerWobbly: { wobble: 55, edgeBend: 0, cornerRadius: 0 },
   innerPolygon: { ...createFinderPolygonSettings(), moduleNoise: defaults.moduleNoise, moduleSmooth: defaults.moduleSmooth },
   alignmentAsModules: true,
   alignment: createAlignmentSettings(),
@@ -1041,10 +1041,10 @@ function getRegularPolygonGeometry(properties = state) {
   return geometry;
 }
 
-function getWobblyPolygonGeometry(properties, { wobble, edgeBend }) {
-  const base = getRegularPolygonGeometry({ ...properties, moduleCornerRadius: 0 });
-  if (wobble === 0 && edgeBend === 0) return base;
+function getWobblyPolygonGeometry(properties, { wobble, edgeBend, cornerRadius = 0 }) {
+  if (wobble === 0 && edgeBend === 0) return getRegularPolygonGeometry({ ...properties, moduleCornerRadius: cornerRadius });
 
+  const base = getRegularPolygonGeometry({ ...properties, moduleCornerRadius: 0 });
   const maxShift = wobble / 100 * .35 / OUTER_FINDER_SIZE;
   const maxBend = edgeBend / 100 * .25 / OUTER_FINDER_SIZE;
   const vertices = [base.start, ...base.segments.map(({ end }) => end)].map(([x, y], index) => {
@@ -1052,17 +1052,55 @@ function getWobblyPolygonGeometry(properties, { wobble, edgeBend }) {
     const shift = maxShift * (.4 + .6 * randomModuleFraction("wobblyContour", index, 1));
     return [x + shift * Math.cos(direction), y + shift * Math.sin(direction)];
   });
-  const segments = maxBend === 0 ? vertices.slice(1).map((end) => ({ type: "line", end })) : vertices.map(([x, y], index) => {
-    const end = vertices[(index + 1) % vertices.length];
-    const dx = end[0] - x;
-    const dy = end[1] - y;
+  if (maxBend === 0 && cornerRadius === 0) {
+    const sides = vertices.slice(1).map((end) => ({ type: "line", end }));
+    return fitModulePath(vertices[0], sides, 1, { maxScale: 1 });
+  }
+
+  const trim = cornerRadius / 200;
+  const span = 1 - 2 * trim;
+  const edges = vertices.map(([x, y], index) => {
+    const [nextX, nextY] = vertices[(index + 1) % vertices.length];
+    const dx = nextX - x;
+    const dy = nextY - y;
     const bend = maxBend * (2 * randomModuleFraction("wobblyContour", index, 2) - 1);
-    // Equal normal offsets on both handles place the peak at the midpoint.
-    const offset = 4 * bend / (3 * Math.hypot(dx, dy));
-    const point = (fraction) => [x + dx * fraction - dy * offset, y + dy * fraction + dx * offset];
-    return { type: "cubic", end, controls: [point(1 / 3), point(2 / 3)] };
+    const offset = 4 * bend / Math.hypot(dx, dy);
+    const pointAt = (t) => [x + dx * t - dy * offset * t * (1 - t), y + dy * t + dx * offset * t * (1 - t)];
+    const tangentAt = (t) => [dx - dy * offset * (1 - 2 * t), dy + dx * offset * (1 - 2 * t)];
+    return {
+      start: pointAt(trim), end: pointAt(1 - trim),
+      incoming: tangentAt(trim), outgoing: tangentAt(1 - trim),
+    };
   });
-  return fitModulePath(vertices[0], segments, 1, { maxScale: 1 });
+  const segments = [];
+  edges.forEach((edge, index) => {
+    if (span > 0) {
+      segments.push(maxBend === 0 ? { type: "line", end: edge.end } : {
+        type: "cubic", end: edge.end,
+        controls: [
+          edge.start.map((value, axis) => value + edge.incoming[axis] * span / 3),
+          edge.end.map((value, axis) => value - edge.outgoing[axis] * span / 3),
+        ],
+      });
+    }
+    if (trim > 0) {
+      const next = edges[(index + 1) % edges.length];
+      const [ax, ay] = edge.outgoing;
+      const [bx, by] = next.incoming;
+      const cosine = (ax * bx + ay * by) / (Math.hypot(ax, ay) * Math.hypot(bx, by));
+      const halfCosine = Math.sqrt(Math.max(0, (1 + cosine) / 2));
+      // The circular-arc handle factor keeps the join tangent to both trimmed edges.
+      const handle = trim * 4 * halfCosine / (3 * (1 + halfCosine));
+      segments.push({
+        type: "cubic", end: next.start,
+        controls: [
+          edge.end.map((value, axis) => value + edge.outgoing[axis] * handle),
+          next.start.map((value, axis) => value - next.incoming[axis] * handle),
+        ],
+      });
+    }
+  });
+  return fitModulePath(edges[0].start, segments, 1, { maxScale: 1 });
 }
 
 function moduleGeometryCommand(x, y, geometry) {
