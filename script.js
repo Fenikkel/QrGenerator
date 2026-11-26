@@ -22,8 +22,9 @@ const defaults = {
   moduleGooeyDensity: 4,
   moduleGooeyBallSize: 50,
   moduleGooeyBlendStrength: 70,
-  moduleGooeyLinkBallSize: 50,
+  moduleGooeyLinkBallSize: 80,
   moduleGooeyLinkDensity: 1,
+  moduleGooeyMerge: "all",
   moduleMerge: "none",
   backgroundColor: "transparent",
   exportFormat: "svg",
@@ -46,6 +47,7 @@ const state = {
   outerWobbly: { wobble: 55, edgeBend: 0, cornerRadius: 0 },
   outerGooey: { density: 56, sizeVariation: 60, spacingVariation: 55, pathDeviation: 55, blendStrength: 80 },
   innerPolygon: { ...createFinderPolygonSettings(), moduleNoise: defaults.moduleNoise, moduleSmooth: defaults.moduleSmooth },
+  innerGooey: { density: 7, ballSize: 75, blendStrength: 45, linkBallSize: 40 },
   alignmentAsModules: true,
   alignment: createAlignmentSettings(),
   individualCorners: false,
@@ -65,7 +67,7 @@ const state = {
   moduleRandom: {
     moduleSides: false, moduleScale: false, moduleCornerRadius: false,
     moduleRotation: false, moduleNoise: false, moduleSmooth: false,
-    moduleGooeyDensity: false, moduleGooeyBallSize: false, moduleGooeyBlendStrength: false,
+    moduleGooeyDensity: true, moduleGooeyBallSize: true, moduleGooeyBlendStrength: false,
     moduleGooeyLinkBallSize: false,
   },
   moduleRandomRanges: {
@@ -75,8 +77,8 @@ const state = {
     moduleRotation: { min: 0, max: 360 },
     moduleNoise: { min: 0, max: 100 },
     moduleSmooth: { min: 0, max: 100 },
-    moduleGooeyDensity: { min: 1, max: 9 },
-    moduleGooeyBallSize: { min: 25, max: 100 },
+    moduleGooeyDensity: { min: 3, max: 7 },
+    moduleGooeyBallSize: { min: 50, max: 75 },
     moduleGooeyBlendStrength: { min: 0, max: 100 },
     moduleGooeyLinkBallSize: { min: 25, max: 100 },
   },
@@ -167,6 +169,8 @@ const elements = {
   cutOuterMarkerCorners: document.querySelector("#cutOuterMarkerCorners"),
   outerMarkerCornersOnly: document.querySelector("#outerMarkerCornersOnly"),
   innerMarkerStyle: document.querySelector("#innerMarkerStyle"),
+  innerPolygonProperties: document.querySelector("#innerPolygonProperties"),
+  innerGooeyProperties: document.querySelector("#innerGooeyProperties"),
   moduleScale: document.querySelector("#moduleScale"),
   moduleScaleValue: document.querySelector("#moduleScaleValue"),
   outerMarkerColor: document.querySelector("#outerMarkerColor"),
@@ -204,7 +208,7 @@ const OUTER_FINDER_POLYGON_TRANSFORM = { moduleScale: 100, moduleRotation: 0 };
 const FINDER_PROPERTIES = [
   "outerAsModules", "innerAsModules", "outerMarkerStyle", "innerMarkerStyle",
   "outerMarkerColor", "innerMarkerColor", "cutOuterMarkerCorners", "outerMarkerCornersOnly",
-  "outerPolygon", "outerWobbly", "outerGooey", "innerPolygon",
+  "outerPolygon", "outerWobbly", "outerGooey", "innerPolygon", "innerGooey",
 ];
 const sectionDefaults = {
   module: structuredClone(Object.fromEntries([
@@ -242,6 +246,7 @@ const MODULE_RANDOM_PROPERTIES = {
   moduleGooeyLinkBallSize: { min: 25, max: 100, salt: 0x510e527f },
   moduleBlobContour: { salt: 0x98dfb5ac },
   moduleGooeyZones: { salt: 0x1f83d9ab },
+  innerGooeyZones: { salt: 0x5be0cd19 },
   wobblyContour: { salt: 0xa13b1f37 },
   gooeyContour: { salt: 0x9b05688c },
   moduleColor: { salt: 0xa4093822 },
@@ -263,9 +268,15 @@ const outerPolygonControls = createFinderPolygonControls("outer", {
 const outerWobblyControls = Array.from(elements.outerWobblyProperties.querySelectorAll("[data-wobbly]"), (input) => ({
   key: input.dataset.wobbly, input, output: input.parentElement.querySelector("output"),
 }));
-const outerGooeyControls = Array.from(elements.outerGooeyProperties.querySelectorAll("[data-gooey]"), (input) => ({
-  key: input.dataset.gooey, input, output: input.parentElement.querySelector("output"),
-}));
+const finderGooeyControls = ["outer", "inner"].map((part) => {
+  const key = `${part}Gooey`;
+  const container = elements[`${key}Properties`];
+  const style = part === "outer" ? "gooey-polygon" : "gooey";
+  const controls = Array.from(container.querySelectorAll("[data-gooey]"), (input) => ({
+    key: input.dataset.gooey, input, output: input.parentElement.querySelector("output"),
+  }));
+  return { part, key, container, style, controls };
+});
 const innerPolygonControls = createFinderPolygonControls("inner", { rangeProperties: MODULE_RANGE_PROPERTIES });
 const finderPolygonControls = { outer: outerPolygonControls, inner: innerPolygonControls };
 const alignmentControls = Object.fromEntries(["outer", "inner"].map((part) => [part, createAlignmentControls(part)]));
@@ -642,7 +653,7 @@ function syncAlignmentControls() {
   const randomAlignmentColors = !state.alignmentAsModules && ["outer", "inner"].some((part) => getAlignmentColorCount(part, state.qr) > 1);
   const hasSeededFinder = [0, 1, 2].some((index) => {
     const finder = getFinderSettings(index);
-    return (!finder.innerAsModules && finder.innerMarkerStyle === "blob")
+    return (!finder.innerAsModules && ["blob", "gooey"].includes(finder.innerMarkerStyle))
       || (!finder.outerAsModules && ["wobbly-polygon", "gooey-polygon"].includes(finder.outerMarkerStyle));
   });
   elements.moduleSeedField.hidden = !["blob", "gooey"].includes(state.moduleStyle) && !hasRandomModuleProperties()
@@ -663,22 +674,27 @@ function getFinderPolygon(markerIndex, part = "outer") {
   const finder = getFinderSettings(markerIndex);
   const style = finder[`${part}MarkerStyle`];
   const wobbly = style === "wobbly-polygon" ? finder.outerWobbly : null;
-  const gooey = style === "gooey-polygon" ? finder.outerGooey : null;
+  const outerGooey = style === "gooey-polygon" ? finder.outerGooey : null;
+  const innerGooey = style === "gooey" ? finder.innerGooey : null;
   const polygon = finder[`${part}Polygon`];
-  const settings = part === "outer" && (style === "regular-polygon" || wobbly || gooey)
+  const settings = part === "outer" && (style === "regular-polygon" || wobbly || outerGooey)
     ? { ...polygon, ...OUTER_FINDER_POLYGON_TRANSFORM } : polygon;
   const color = finder[`${part}MarkerColor`];
   const cacheIndex = `${part}:${markerIndex}`;
-  const seed = wobbly || gooey || style === "blob" ? state.moduleSeed : null;
-  const cacheKey = JSON.stringify([style, settings, color, wobbly ?? gooey, seed]);
+  const seed = wobbly || outerGooey || innerGooey || style === "blob" ? state.moduleSeed : null;
+  const cacheKey = JSON.stringify([style, settings, color, wobbly ?? outerGooey ?? innerGooey, seed]);
   if (finderPolygonCache.get(cacheIndex)?.key === cacheKey) return finderPolygonCache.get(cacheIndex).value;
   let shape;
-  if (gooey) {
+  if (outerGooey) {
     const guide = getRegularPolygonGeometry({ ...settings, moduleCornerRadius: 0 });
     const vertices = [guide.start, ...guide.segments.map(({ end }) => end)]
       .map((point) => point.map((value) => value * OUTER_FINDER_SIZE));
-    const random = (index, channel) => randomModuleFraction("gooeyContour", markerIndex, index, channel);
-    shape = { geometry: { loops: createGooeyPolygonLoops(vertices, gooey, random) }, properties: settings };
+    const random = (index, channel) => randomModuleFraction("gooeyContour", 0, index, channel);
+    shape = { geometry: { loops: createGooeyPolygonLoops(vertices, outerGooey, random) }, properties: settings };
+  } else if (innerGooey) {
+    const random = (zone, channel = 0) => randomModuleFraction("innerGooeyZones", channel, zone);
+    const { contours } = createGooeyGridField(innerGooey, random, { zoneSize: 1 / 3, randomizePositions: true });
+    shape = { geometry: { loops: contours }, properties: settings };
   } else if (wobbly) {
     shape = { geometry: getWobblyPolygonGeometry(settings, wobbly), properties: settings };
   } else {
@@ -691,8 +707,8 @@ function getFinderPolygon(markerIndex, part = "outer") {
 
 function finderPolygonCommand(x, y, markerIndex, part = "outer", scale = 1) {
   const { geometry } = getFinderPolygon(markerIndex, part);
-  if (geometry.loops) return gooeyPolygonCommand(geometry.loops, x, y, scale);
   const factor = (part === "outer" ? OUTER_FINDER_SIZE : 3) * scale;
+  if (geometry.loops) return gooeyPolygonCommand(geometry.loops, x, y, part === "outer" ? scale : factor);
   return scaledPolygonCommand(geometry, x, y, factor);
 }
 
@@ -1178,15 +1194,20 @@ function supportsModuleMerge(style) {
   return style === "regular-polygon" || style === "blob" || style === "gooey";
 }
 
+function getModuleMergeKey(style = state.moduleStyle) {
+  return style === "gooey" ? "moduleGooeyMerge" : "moduleMerge";
+}
+
 function mergedModulesPath(code, quietZone, style) {
   const count = code.getModuleCount();
   const geometries = new Array(count * count);
   const commands = [];
   const exclusionBox = state.clearLogoArea ? getLogoBox(code, quietZone) : null;
   const resolveGeometry = getModuleGeometryResolver(style);
-  const squareGroups = state.moduleMerge === "square-groups";
-  const horizontal = squareGroups || state.moduleMerge === "all" || state.moduleMerge === "horizontal";
-  const vertical = squareGroups || state.moduleMerge === "all" || state.moduleMerge === "vertical";
+  const mergeMode = state[getModuleMergeKey(style)];
+  const squareGroups = mergeMode === "square-groups";
+  const horizontal = squareGroups || mergeMode === "all" || mergeMode === "horizontal";
+  const vertical = squareGroups || mergeMode === "all" || mergeMode === "vertical";
   const fusedCells = style === "gooey" && (horizontal || vertical) ? new Uint8Array(count * count) : null;
   for (let row = 0; row < count; row += 1) {
     for (let column = 0; column < count; column += 1) {
@@ -1502,7 +1523,7 @@ function getGooeyModuleGeometry(properties = state) {
   if (gooeyModuleCache?.key === key) return gooeyModuleCache.geometry;
 
   const random = (zone) => randomModuleFraction("moduleGooeyZones", 0, zone);
-  const { contours, fieldAt, blend } = createGooeyModuleField({ density, ballSize, blendStrength }, random);
+  const { contours, fieldAt, blend } = createGooeyGridField({ density, ballSize, blendStrength }, random);
   const geometry = { ...getGooeyContourGeometry(contours), fieldAt, blend };
   gooeyModuleCache = { key, geometry };
   return geometry;
@@ -1828,6 +1849,7 @@ function getMarkerShape(x, y, markerIndex, part, scale = 1) {
   }
   return { tag: "path", attributes: {
     d: finderPolygonCommand(x + 2 * scale, y + 2 * scale, markerIndex, part, scale), fill: color,
+    ...(geometry.loops ? { "fill-rule": "evenodd" } : {}),
   } };
 }
 
@@ -2295,13 +2317,16 @@ function render() {
     input.value = value;
     output.textContent = `${value}%`;
   });
-  const showGooey = finderSettings.outerMarkerStyle === "gooey-polygon" && !finderSettings.outerAsModules;
-  elements.outerGooeyProperties.hidden = !showGooey;
-  outerGooeyControls.forEach(({ key, input, output }) => {
-    const value = finderSettings.outerGooey[key];
-    input.disabled = !showGooey;
-    input.value = value;
-    output.textContent = key === "density" ? String(value) : `${value}%`;
+  elements.innerPolygonProperties.hidden = finderSettings.innerMarkerStyle === "gooey";
+  finderGooeyControls.forEach(({ part, key, container, style, controls }) => {
+    const visible = finderSettings[`${part}MarkerStyle`] === style && !finderSettings[`${part}AsModules`];
+    container.hidden = !visible;
+    controls.forEach(({ key: property, input, output }) => {
+      const value = finderSettings[key][property];
+      input.disabled = !visible;
+      input.value = value;
+      output.textContent = property === "density" ? String(value) : `${value}%`;
+    });
   });
   syncFinderPolygonControls("outer", finderSettings);
   syncFinderPolygonControls("inner", finderSettings);
@@ -2317,7 +2342,8 @@ function render() {
   });
   elements.moduleStyle.value = state.moduleStyle;
   const showModuleGooey = state.moduleStyle === "gooey";
-  const showGooeyLinks = showModuleGooey && state.moduleMerge !== "none";
+  const mergeMode = state[getModuleMergeKey()];
+  const showGooeyLinks = showModuleGooey && mergeMode !== "none";
   elements.moduleSizeField.hidden = showModuleGooey;
   elements.gooeyProperties.forEach((field) => { field.hidden = !showModuleGooey; });
   elements.moduleGooeyLinkBallSize.closest(".range-field").hidden = !showGooeyLinks;
@@ -2370,7 +2396,7 @@ function render() {
   elements.moduleSeed.value = state.moduleSeed;
   elements.moduleSeedValue.textContent = String(state.moduleSeed);
   elements.moduleMergeOptions.forEach((button) => {
-    button.setAttribute("aria-pressed", String(button.dataset.moduleMerge === state.moduleMerge));
+    button.setAttribute("aria-pressed", String(button.dataset.moduleMerge === mergeMode));
   });
   ALL_MODULE_RANGE_PROPERTIES.forEach(([key, suffix]) => {
     elements[key].value = state[key];
@@ -2601,10 +2627,12 @@ outerWobblyControls.forEach(({ key, input }) => {
   });
 });
 
-outerGooeyControls.forEach(({ key, input }) => {
-  input.addEventListener("input", () => {
-    getFinderSettings().outerGooey[key] = Number(input.value);
-    render();
+finderGooeyControls.forEach(({ key, controls }) => {
+  controls.forEach(({ key: property, input }) => {
+    input.addEventListener("input", () => {
+      getFinderSettings()[key][property] = Number(input.value);
+      render();
+    });
   });
 });
 
@@ -2847,8 +2875,9 @@ elements.moduleSeed.addEventListener("input", () => {
 elements.moduleMergeOptions.forEach((button) => {
   button.addEventListener("click", () => {
     const merge = button.dataset.moduleMerge;
-    if (state.moduleMerge === merge) return;
-    state.moduleMerge = merge;
+    const key = getModuleMergeKey();
+    if (state[key] === merge) return;
+    state[key] = merge;
     render();
   });
 });

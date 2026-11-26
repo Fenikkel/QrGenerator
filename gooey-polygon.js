@@ -7,29 +7,66 @@ function gooeyInfluence(squaredDistance, reach, blend) {
   return squaredDistance < reach * reach ? ((reach - Math.sqrt(squaredDistance)) / blend) ** 2 : 0;
 }
 
-function gooeyModuleBallRadius(size) {
-  return (size / 100) * GOOEY_MODULE_ZONE_SIZE / 2;
+function gooeyBallRadius(size, zoneSize) {
+  return (size / 100) * zoneSize / 2;
 }
 
-function createGooeyModuleField({ density, ballSize, blendStrength }, random) {
+function createGooeyGridField(
+  { density, ballSize, blendStrength, linkBallSize = 0 }, random,
+  { zoneSize = GOOEY_MODULE_ZONE_SIZE, randomizePositions = false } = {},
+) {
   const blend = .015 + .28 * blendStrength / 100;
-  const zoneSize = GOOEY_MODULE_ZONE_SIZE;
   const center = .5;
-  const peripheralRadius = gooeyModuleBallRadius(ballSize);
-  // Centers of the two zones along each axis, plus their shared dividing line.
+  const peripheralRadius = gooeyBallRadius(ballSize, zoneSize);
+  const positionSpread = zoneSize / 4;
   const positions = [zoneSize / 2, center, 1 - zoneSize / 2];
-  const sites = positions.flatMap((y, row) => positions.map((x, column) => ({
-    x, y, order: random(row * positions.length + column),
-  }))).filter(({ x, y }) => x !== center || y !== center);
+  const side = positions.length;
+  const centerIndex = Math.floor(side ** 2 / 2);
+  const sites = positions.flatMap((y, row) => positions.map((x, column) => {
+    const index = row * side + column;
+    return { x, y, index, order: random(index) };
+  })).filter(({ index }) => index !== centerIndex);
   sites.sort((a, b) => a.order - b.order);
   const balls = [
-    { x: center, y: center, radius: gooeyModuleBallRadius(100) },
-    ...sites.slice(0, density - 1).map(({ x, y }) => ({ x, y, radius: peripheralRadius })),
+    { x: center, y: center, index: centerIndex, radius: gooeyBallRadius(100, zoneSize) },
+    ...sites.slice(0, density - 1).map(({ x, y, index }) => ({
+      x: randomizePositions ? x + (random(index, 1) - .5) * positionSpread : x,
+      y: randomizePositions ? y + (random(index, 2) - .5) * positionSpread : y,
+      index,
+      radius: peripheralRadius,
+    })),
   ];
+  if (linkBallSize > 0) {
+    const occupied = new Map(balls.map((ball) => [ball.index, ball]));
+    const radius = gooeyBallRadius(linkBallSize, zoneSize);
+    const links = new Map();
+    for (const [index, ball] of occupied) {
+      const column = index % side;
+      const below = index + side;
+      const hasRight = column < side - 1;
+      const neighbors = [
+        hasRight ? occupied.get(index + 1) : null,
+        occupied.get(below),
+        column > 0 ? occupied.get(below - 1) : null,
+        hasRight ? occupied.get(below + 1) : null,
+      ];
+      for (const neighbor of neighbors) {
+        if (!neighbor) continue;
+        const dx = neighbor.x - ball.x;
+        const dy = neighbor.y - ball.y;
+        const offset = (ball.radius - neighbor.radius) / (2 * Math.hypot(dx, dy));
+        const x = (ball.x + neighbor.x) / 2 + dx * offset;
+        const y = (ball.y + neighbor.y) / 2 + dy * offset;
+        // Diagonal links with the same center share one ball.
+        links.set(`${x}:${y}`, { x, y, radius });
+      }
+    }
+    balls.push(...links.values());
+  }
   const fieldAt = (x, y) => balls.reduce((sum, ball) => (
     sum + gooeyInfluence((x - ball.x) ** 2 + (y - ball.y) ** 2, ball.radius + blend, blend)
   ), 0);
-  const contours = traceGooeyLoops(balls, blend, { size: 1, step: 1 / 60, outset: .25 });
+  const contours = traceGooeyLoops(balls, blend, { size: 1, step: 1 / 60, outset: randomizePositions ? .5 : .25 });
   return { contours, fieldAt, blend };
 }
 
@@ -127,7 +164,7 @@ function traceGooeyModulePair(first, second, direction, linkBallSize, linkDensit
     return [.5 + dx * offset, .5 + dy * offset];
   });
   const blend = (first.blend + second.blend) / 2;
-  const reach = gooeyModuleBallRadius(linkBallSize) + blend;
+  const reach = gooeyBallRadius(linkBallSize, GOOEY_MODULE_ZONE_SIZE) + blend;
   const combinedField = (x, y) => {
     let field = first.fieldAt(x, y) + second.fieldAt(x - dx, y - dy);
     for (const [linkX, linkY] of linkCenters) {

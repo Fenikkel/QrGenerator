@@ -10,8 +10,8 @@
     <link rel="stylesheet" href="styles.css?v=20261124-1">
     <script src="vendor/qrcode.js?v=20261105-1" defer></script>
     <script src="logo-area.js?v=20261105-1" defer></script>
-    <script src="gooey-polygon.js?v=20261126-24" defer></script>
-    <script src="script.js?v=20261126-22" defer></script>
+    <script src="gooey-polygon.js?v=20261126-30" defer></script>
+    <script src="script.js?v=20261126-32" defer></script>
   </head>
   <body>
     <main>
@@ -247,7 +247,7 @@
               <div class="range-field gooey-property style-property" hidden>
                 <div class="property-heading">
                   <label for="moduleGooeyDensity">Density</label>
-                  <button type="button" class="shuffle-button" data-module-random="moduleGooeyDensity" aria-label="Randomize module density" aria-pressed="false" aria-controls="moduleGooeyDensityControl moduleGooeyDensityRandomControl" title="Randomize density">
+                  <button type="button" class="shuffle-button" data-module-random="moduleGooeyDensity" aria-label="Randomize module density" aria-pressed="true" aria-controls="moduleGooeyDensityControl moduleGooeyDensityRandomControl" title="Randomize density">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18 3 3 3-3 3m0 6 3 3-3 3M3 6h2c5 0 9 12 14 12h2M3 18h2c5 0 9-12 14-12h2"/></svg>
                   </button>
                 </div>
@@ -256,19 +256,19 @@
                   <output id="moduleGooeyDensityValue" for="moduleGooeyDensity">4</output>
                 </span>
                 <div id="moduleGooeyDensityRandomControl" class="random-range" data-module-random-range="moduleGooeyDensity" role="group" aria-label="Random module density range" hidden>
-                  <output data-bound-value="min" for="moduleGooeyDensityMin">1</output>
+                  <output data-bound-value="min" for="moduleGooeyDensityMin">3</output>
                   <div class="random-range-track">
                     <span class="random-range-rail" aria-hidden="true"></span>
-                    <input id="moduleGooeyDensityMin" type="range" min="1" max="9" step="1" value="1" data-bound="min" aria-label="Minimum random module density">
-                    <input id="moduleGooeyDensityMax" type="range" min="1" max="9" step="1" value="9" data-bound="max" aria-label="Maximum random module density">
+                    <input id="moduleGooeyDensityMin" type="range" min="1" max="9" step="1" value="3" data-bound="min" aria-label="Minimum random module density">
+                    <input id="moduleGooeyDensityMax" type="range" min="1" max="9" step="1" value="7" data-bound="max" aria-label="Maximum random module density">
                   </div>
-                  <output data-bound-value="max" for="moduleGooeyDensityMax">9</output>
+                  <output data-bound-value="max" for="moduleGooeyDensityMax">7</output>
                 </div>
               </div>
               <div class="range-field gooey-property style-property" hidden>
                 <div class="property-heading">
                   <label for="moduleGooeyBallSize">Peripheral ball size</label>
-                  <button type="button" class="shuffle-button" data-module-random="moduleGooeyBallSize" aria-label="Randomize peripheral ball size" aria-pressed="false" aria-controls="moduleGooeyBallSizeControl moduleGooeyBallSizeRandomControl" title="Randomize peripheral ball size">
+                  <button type="button" class="shuffle-button" data-module-random="moduleGooeyBallSize" aria-label="Randomize peripheral ball size" aria-pressed="true" aria-controls="moduleGooeyBallSizeControl moduleGooeyBallSizeRandomControl" title="Randomize peripheral ball size">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18 3 3 3-3 3m0 6 3 3-3 3M3 6h2c5 0 9 12 14 12h2M3 18h2c5 0 9-12 14-12h2"/></svg>
                   </button>
                 </div>
@@ -277,13 +277,13 @@
                   <output id="moduleGooeyBallSizeValue" for="moduleGooeyBallSize">50%</output>
                 </span>
                 <div id="moduleGooeyBallSizeRandomControl" class="random-range" data-module-random-range="moduleGooeyBallSize" role="group" aria-label="Random peripheral ball size range" hidden>
-                  <output data-bound-value="min" for="moduleGooeyBallSizeMin">25%</output>
+                  <output data-bound-value="min" for="moduleGooeyBallSizeMin">50%</output>
                   <div class="random-range-track">
                     <span class="random-range-rail" aria-hidden="true"></span>
-                    <input id="moduleGooeyBallSizeMin" type="range" min="25" max="100" step="1" value="25" data-bound="min" aria-label="Minimum random peripheral ball size">
-                    <input id="moduleGooeyBallSizeMax" type="range" min="25" max="100" step="1" value="100" data-bound="max" aria-label="Maximum random peripheral ball size">
+                    <input id="moduleGooeyBallSizeMin" type="range" min="25" max="100" step="1" value="50" data-bound="min" aria-label="Minimum random peripheral ball size">
+                    <input id="moduleGooeyBallSizeMax" type="range" min="25" max="100" step="1" value="75" data-bound="max" aria-label="Maximum random peripheral ball size">
                   </div>
-                  <output data-bound-value="max" for="moduleGooeyBallSizeMax">100%</output>
+                  <output data-bound-value="max" for="moduleGooeyBallSizeMax">75%</output>
                 </div>
               </div>
               <div class="range-field gooey-property style-property" hidden>
@@ -325,8 +325,8 @@
                   </button>
                 </div>
                 <span id="moduleGooeyLinkBallSizeControl" class="range-control">
-                  <input id="moduleGooeyLinkBallSize" type="range" min="25" max="100" step="1" value="50">
-                  <output id="moduleGooeyLinkBallSizeValue" for="moduleGooeyLinkBallSize">50%</output>
+                  <input id="moduleGooeyLinkBallSize" type="range" min="25" max="100" step="1" value="80">
+                  <output id="moduleGooeyLinkBallSizeValue" for="moduleGooeyLinkBallSize">80%</output>
                 </span>
                 <div id="moduleGooeyLinkBallSizeRandomControl" class="random-range" data-module-random-range="moduleGooeyLinkBallSize" role="group" aria-label="Random link ball size range" hidden>
                   <output data-bound-value="min" for="moduleGooeyLinkBallSizeMin">25%</output>
@@ -484,9 +484,40 @@
                     <select id="innerMarkerStyle" aria-label="Inner style">
                       <option value="regular-polygon" selected>Regular polygon</option>
                       <option value="blob">Blob</option>
+                      <option value="gooey">Gooey</option>
                       <option value="figure">Figures</option>
                     </select>
                     <div id="innerPolygonProperties" class="finder-polygon-properties"></div>
+                    <div id="innerGooeyProperties" class="finder-polygon-properties" hidden>
+                      <div class="range-field">
+                        <div class="property-heading"><label for="innerGooeyDensity">Density</label></div>
+                        <span class="range-control">
+                          <input id="innerGooeyDensity" data-gooey="density" type="range" min="1" max="9" step="1" value="7">
+                          <output for="innerGooeyDensity">7</output>
+                        </span>
+                      </div>
+                      <div class="range-field">
+                        <div class="property-heading"><label for="innerGooeyBallSize">Peripheral ball size</label></div>
+                        <span class="range-control">
+                          <input id="innerGooeyBallSize" data-gooey="ballSize" type="range" min="25" max="100" step="1" value="75">
+                          <output for="innerGooeyBallSize">75%</output>
+                        </span>
+                      </div>
+                      <div class="range-field">
+                        <div class="property-heading"><label for="innerGooeyBlendStrength">Blend strength</label></div>
+                        <span class="range-control">
+                          <input id="innerGooeyBlendStrength" data-gooey="blendStrength" type="range" min="0" max="100" step="1" value="45">
+                          <output for="innerGooeyBlendStrength">45%</output>
+                        </span>
+                      </div>
+                      <div class="range-field">
+                        <div class="property-heading"><label for="innerGooeyLinkBallSize">Link ball size</label></div>
+                        <span class="range-control">
+                          <input id="innerGooeyLinkBallSize" data-gooey="linkBallSize" type="range" min="0" max="100" step="1" value="40">
+                          <output for="innerGooeyLinkBallSize">40%</output>
+                        </span>
+                      </div>
+                    </div>
                     <div class="color-field style-property">
                       <label for="innerMarkerColor">Color</label>
                       <span class="color-input-wrap">
