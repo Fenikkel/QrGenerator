@@ -2,6 +2,7 @@ const GOOEY_OUTSET = .25;
 const GOOEY_GRID_STEP = .05;
 const GOOEY_FINDER_SIZE = 7;
 const GOOEY_MODULE_ZONE_SIZE = .5;
+const GOOEY_PERIPHERAL_ZONES = [0, 1, 2, 3, 5, 6, 7, 8];
 
 function gooeyInfluence(squaredDistance, reach, blend) {
   return squaredDistance < reach * reach ? ((reach - Math.sqrt(squaredDistance)) / blend) ** 2 : 0;
@@ -11,9 +12,14 @@ function gooeyBallRadius(size, zoneSize) {
   return (size / 100) * zoneSize / 2;
 }
 
+function selectGooeyPeripheralZones(density, random) {
+  return GOOEY_PERIPHERAL_ZONES.map((index) => ({ index, order: random(index) }))
+    .sort((a, b) => a.order - b.order).slice(0, density - 1).map(({ index }) => index);
+}
+
 function createGooeyGridField(
   { density, ballSize, blendStrength, linkBallSize = 0 }, random,
-  { zoneSize = GOOEY_MODULE_ZONE_SIZE, randomizePositions = false } = {},
+  { zoneSize = GOOEY_MODULE_ZONE_SIZE, randomizePositions = false, peripheralZones = selectGooeyPeripheralZones(density, random) } = {},
 ) {
   const blend = .015 + .28 * blendStrength / 100;
   const center = .5;
@@ -22,19 +28,18 @@ function createGooeyGridField(
   const positions = [zoneSize / 2, center, 1 - zoneSize / 2];
   const side = positions.length;
   const centerIndex = Math.floor(side ** 2 / 2);
-  const sites = positions.flatMap((y, row) => positions.map((x, column) => {
-    const index = row * side + column;
-    return { x, y, index, order: random(index) };
-  })).filter(({ index }) => index !== centerIndex);
-  sites.sort((a, b) => a.order - b.order);
   const balls = [
     { x: center, y: center, index: centerIndex, radius: gooeyBallRadius(100, zoneSize) },
-    ...sites.slice(0, density - 1).map(({ x, y, index }) => ({
-      x: randomizePositions ? x + (random(index, 1) - .5) * positionSpread : x,
-      y: randomizePositions ? y + (random(index, 2) - .5) * positionSpread : y,
-      index,
-      radius: peripheralRadius,
-    })),
+    ...peripheralZones.map((index) => {
+      const x = positions[index % side];
+      const y = positions[Math.floor(index / side)];
+      return {
+        x: randomizePositions ? x + (random(index, 1) - .5) * positionSpread : x,
+        y: randomizePositions ? y + (random(index, 2) - .5) * positionSpread : y,
+        index,
+        radius: peripheralRadius,
+      };
+    }),
   ];
   if (linkBallSize > 0) {
     const occupied = new Map(balls.map((ball) => [ball.index, ball]));

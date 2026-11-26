@@ -958,6 +958,7 @@ function getModuleGeometryResolver(style = state.moduleStyle) {
   }
   const rangeProperties = getModuleRangeProperties(style);
   const individual = style === "regular-polygon" && state.individualCorners;
+  const randomGooeyZones = style === "gooey" && state.moduleRandom.moduleGooeyDensity;
   const key = `${style}:${style === "figure" ? state.moduleFigures.join(",") : ""}:${state.moduleSeed}:` + rangeProperties.map(([property]) => (
     state.moduleSteps[property]?.enabled
       ? `steps:${state.moduleSteps[property].count}`
@@ -990,8 +991,14 @@ function getModuleGeometryResolver(style = state.moduleStyle) {
         state.moduleRandom.moduleCornerRadius ? randomModuleValue("moduleCornerRadius", row, column, index) : state.cornerRadii[index].value
       ));
     }
-    const variantKey = (style === "figure" ? `${properties.moduleFigure}:` : "")
+    let variantKey = (style === "figure" ? `${properties.moduleFigure}:` : "")
       + rangeProperties.map(([property]) => property === "moduleCornerRadius" && individual ? properties.moduleCornerRadii.join(",") : properties[property]).join(":");
+    if (randomGooeyZones) {
+      const random = (zone) => randomModuleFraction("moduleGooeyZones", row, column, zone);
+      const zones = selectGooeyPeripheralZones(properties.moduleGooeyDensity, random).sort((a, b) => a - b);
+      properties.moduleGooeyPeripheralZones = zones;
+      variantKey += `:${zones.join(",")}`;
+    }
     let geometry = cache.variants.get(variantKey);
     if (!geometry) {
       geometry = buildGeometry(properties);
@@ -1519,11 +1526,12 @@ function getFigureGeometry(properties = state) {
 
 function getGooeyModuleGeometry(properties = state) {
   const { moduleGooeyDensity: density, moduleGooeyBallSize: ballSize, moduleGooeyBlendStrength: blendStrength } = properties;
-  const key = `${state.moduleSeed}:${density}:${ballSize}:${blendStrength}`;
+  const peripheralZones = properties.moduleGooeyPeripheralZones;
+  const key = `${state.moduleSeed}:${density}:${ballSize}:${blendStrength}:${peripheralZones?.join(",") ?? ""}`;
   if (gooeyModuleCache?.key === key) return gooeyModuleCache.geometry;
 
   const random = (zone) => randomModuleFraction("moduleGooeyZones", 0, zone);
-  const { contours, fieldAt, blend } = createGooeyGridField({ density, ballSize, blendStrength }, random);
+  const { contours, fieldAt, blend } = createGooeyGridField({ density, ballSize, blendStrength }, random, { peripheralZones });
   const geometry = { ...getGooeyContourGeometry(contours), fieldAt, blend };
   gooeyModuleCache = { key, geometry };
   return geometry;
