@@ -37,6 +37,7 @@ const defaults = {
 const STRESS_TEST_DEFAULTS = {
   blur: false, contrast: false, lowLight: false, glare: false, noise: false,
 };
+const WOBBLY_DEFAULTS = { wobble: 55, edgeBend: 0, cornerRadius: 0 };
 
 const state = {
   ...defaults,
@@ -44,10 +45,11 @@ const state = {
   selectedFinderPattern: 0,
   finderPatterns: null,
   outerPolygon: createFinderPolygonSettings(),
-  outerWobbly: { wobble: 55, edgeBend: 0, cornerRadius: 0 },
+  outerWobbly: { ...WOBBLY_DEFAULTS },
   outerGooey: { density: 56, sizeVariation: 60, spacingVariation: 55, pathDeviation: 55, blendStrength: 80 },
   innerPolygon: { ...createFinderPolygonSettings(), moduleNoise: defaults.moduleNoise, moduleSmooth: defaults.moduleSmooth },
-  innerGooey: { density: 7, ballSize: 75, blendStrength: 45, linkBallSize: 40 },
+  innerWobbly: { ...WOBBLY_DEFAULTS },
+  innerGooey: { density: 9, ballSize: 75, blendStrength: 45, linkBallSize: 40 },
   alignmentAsModules: true,
   alignment: createAlignmentSettings(),
   individualCorners: false,
@@ -60,6 +62,8 @@ const state = {
   },
   moduleColorCount: 1,
   moduleExtraColors: Array(3).fill(defaults.moduleColor),
+  moduleWobble: WOBBLY_DEFAULTS.wobble,
+  moduleEdgeBend: WOBBLY_DEFAULTS.edgeBend,
   moduleFigures: [defaults.moduleFigure],
   encodedUrl: defaults.url,
   qr: null,
@@ -121,6 +125,7 @@ const elements = {
   moduleSeed: document.querySelector("#moduleSeed"),
   moduleSeedValue: document.querySelector("#moduleSeedValue"),
   polygonProperties: document.querySelectorAll(".polygon-property"),
+  wobblyProperties: document.querySelectorAll(".wobbly-property"),
   blobProperties: document.querySelectorAll(".blob-property"),
   gooeyProperties: document.querySelectorAll(".gooey-property"),
   shapeProperties: document.querySelectorAll(".shape-property"),
@@ -129,6 +134,10 @@ const elements = {
   moduleFigureOptions: document.querySelectorAll("[data-module-figure]"),
   moduleSides: document.querySelector("#moduleSides"),
   moduleSidesValue: document.querySelector("#moduleSidesValue"),
+  moduleWobble: document.querySelector("#moduleWobble"),
+  moduleWobbleValue: document.querySelector("#moduleWobbleValue"),
+  moduleEdgeBend: document.querySelector("#moduleEdgeBend"),
+  moduleEdgeBendValue: document.querySelector("#moduleEdgeBendValue"),
   moduleCornerRadius: document.querySelector("#moduleCornerRadius"),
   moduleCornerRadiusValue: document.querySelector("#moduleCornerRadiusValue"),
   moduleNoise: document.querySelector("#moduleNoise"),
@@ -170,6 +179,7 @@ const elements = {
   outerMarkerCornersOnly: document.querySelector("#outerMarkerCornersOnly"),
   innerMarkerStyle: document.querySelector("#innerMarkerStyle"),
   innerPolygonProperties: document.querySelector("#innerPolygonProperties"),
+  innerWobblyProperties: document.querySelector("#innerWobblyProperties"),
   innerGooeyProperties: document.querySelector("#innerGooeyProperties"),
   moduleScale: document.querySelector("#moduleScale"),
   moduleScaleValue: document.querySelector("#moduleScaleValue"),
@@ -204,11 +214,11 @@ const QUIET_ZONE = 4;
 const MODULE_PALETTE_CLIP_ID = "module-palette-clip";
 const OUTER_FINDER_SIZE = 7;
 const OUTER_FINDER_SIDE_LIMITS = { min: 4, max: 12, step: 4 };
-const OUTER_FINDER_POLYGON_TRANSFORM = { moduleScale: 100, moduleRotation: 0 };
+const FIXED_FINDER_POLYGON_TRANSFORM = { moduleScale: 100, moduleRotation: 0 };
 const FINDER_PROPERTIES = [
   "outerAsModules", "innerAsModules", "outerMarkerStyle", "innerMarkerStyle",
   "outerMarkerColor", "innerMarkerColor", "cutOuterMarkerCorners", "outerMarkerCornersOnly",
-  "outerPolygon", "outerWobbly", "outerGooey", "innerPolygon", "innerGooey",
+  "outerPolygon", "outerWobbly", "outerGooey", "innerPolygon", "innerWobbly", "innerGooey",
 ];
 const sectionDefaults = {
   module: structuredClone(Object.fromEntries([
@@ -223,13 +233,15 @@ const MODULE_RANGE_PROPERTIES = [
   ["moduleSmooth", "%"], ["moduleRotation", "°"],
 ];
 const POLYGON_RANGE_PROPERTIES = MODULE_RANGE_PROPERTIES.filter(([key]) => !["moduleNoise", "moduleSmooth"].includes(key));
+const WOBBLY_DEFORMATION_PROPERTIES = [["moduleWobble", "%"], ["moduleEdgeBend", "%"]];
+const WOBBLY_RANGE_PROPERTIES = [...POLYGON_RANGE_PROPERTIES, ...WOBBLY_DEFORMATION_PROPERTIES];
 const BLOB_RANGE_PROPERTIES = MODULE_RANGE_PROPERTIES.filter(([key]) => key !== "moduleCornerRadius");
 const FIGURE_RANGE_PROPERTIES = POLYGON_RANGE_PROPERTIES.filter(([key]) => ["moduleScale", "moduleRotation"].includes(key));
 const GOOEY_RANGE_PROPERTIES = [
   ["moduleGooeyDensity", ""], ["moduleGooeyBallSize", "%"], ["moduleGooeyBlendStrength", "%"],
 ];
 const ALL_MODULE_RANGE_PROPERTIES = [
-  ...MODULE_RANGE_PROPERTIES, ...GOOEY_RANGE_PROPERTIES,
+  ...MODULE_RANGE_PROPERTIES, ...WOBBLY_DEFORMATION_PROPERTIES, ...GOOEY_RANGE_PROPERTIES,
   ["moduleGooeyLinkBallSize", "%"], ["moduleGooeyLinkDensity", ""],
 ];
 const MODULE_FIGURES = ["cross", "heart", "rounded-star"];
@@ -263,17 +275,17 @@ const individualCornerControls = createIndividualCornerControls();
 const moduleColorControls = createModuleColorControls();
 const outerPolygonControls = createFinderPolygonControls("outer", {
   sideLimits: OUTER_FINDER_SIDE_LIMITS,
-  fixedPolygonProperties: OUTER_FINDER_POLYGON_TRANSFORM,
+  fixedPolygonProperties: FIXED_FINDER_POLYGON_TRANSFORM,
 });
-const outerWobblyControls = Array.from(elements.outerWobblyProperties.querySelectorAll("[data-wobbly]"), (input) => ({
-  key: input.dataset.wobbly, input, output: input.parentElement.querySelector("output"),
-}));
-const finderGooeyControls = ["outer", "inner"].map((part) => {
-  const key = `${part}Gooey`;
+const finderCustomStyleControls = [
+  ["outer", "Wobbly", "wobbly-polygon"], ["inner", "Wobbly", "wobbly-polygon"],
+  ["outer", "Gooey", "gooey-polygon"], ["inner", "Gooey", "gooey"],
+].map(([part, type, style]) => {
+  const key = `${part}${type}`;
   const container = elements[`${key}Properties`];
-  const style = part === "outer" ? "gooey-polygon" : "gooey";
-  const controls = Array.from(container.querySelectorAll("[data-gooey]"), (input) => ({
-    key: input.dataset.gooey, input, output: input.parentElement.querySelector("output"),
+  const property = type.toLowerCase();
+  const controls = Array.from(container.querySelectorAll(`[data-${property}]`), (input) => ({
+    key: input.dataset[property], input, output: input.parentElement.querySelector("output"),
   }));
   return { part, key, container, style, controls };
 });
@@ -653,10 +665,10 @@ function syncAlignmentControls() {
   const randomAlignmentColors = !state.alignmentAsModules && ["outer", "inner"].some((part) => getAlignmentColorCount(part, state.qr) > 1);
   const hasSeededFinder = [0, 1, 2].some((index) => {
     const finder = getFinderSettings(index);
-    return (!finder.innerAsModules && ["blob", "gooey"].includes(finder.innerMarkerStyle))
+    return (!finder.innerAsModules && ["blob", "gooey", "wobbly-polygon"].includes(finder.innerMarkerStyle))
       || (!finder.outerAsModules && ["wobbly-polygon", "gooey-polygon"].includes(finder.outerMarkerStyle));
   });
-  elements.moduleSeedField.hidden = !["blob", "gooey"].includes(state.moduleStyle) && !hasRandomModuleProperties()
+  elements.moduleSeedField.hidden = !["blob", "gooey", "wobbly-polygon"].includes(state.moduleStyle) && !hasRandomModuleProperties()
     && state.moduleColorCount === 1 && !randomAlignmentColors && !hasSeededFinder;
 }
 
@@ -673,12 +685,12 @@ function getPatternPolygon(style, settings) {
 function getFinderPolygon(markerIndex, part = "outer") {
   const finder = getFinderSettings(markerIndex);
   const style = finder[`${part}MarkerStyle`];
-  const wobbly = style === "wobbly-polygon" ? finder.outerWobbly : null;
+  const wobbly = style === "wobbly-polygon" ? finder[`${part}Wobbly`] : null;
   const outerGooey = style === "gooey-polygon" ? finder.outerGooey : null;
   const innerGooey = style === "gooey" ? finder.innerGooey : null;
   const polygon = finder[`${part}Polygon`];
-  const settings = part === "outer" && (style === "regular-polygon" || wobbly || outerGooey)
-    ? { ...polygon, ...OUTER_FINDER_POLYGON_TRANSFORM } : polygon;
+  const fixedTransform = wobbly || (part === "outer" && (style === "regular-polygon" || outerGooey));
+  const settings = fixedTransform ? { ...polygon, ...FIXED_FINDER_POLYGON_TRANSFORM } : polygon;
   const color = finder[`${part}MarkerColor`];
   const cacheIndex = `${part}:${markerIndex}`;
   const seed = wobbly || outerGooey || innerGooey || style === "blob" ? state.moduleSeed : null;
@@ -857,10 +869,12 @@ function getVisibleCornerCount() {
 }
 
 function syncIndividualCornerControls() {
-  const enabled = state.moduleStyle === "regular-polygon" && state.individualCorners;
+  const available = state.moduleStyle === "regular-polygon";
+  const enabled = available && state.individualCorners;
   const count = getVisibleCornerCount();
   const random = state.moduleRandom.moduleCornerRadius;
   elements.individualCornersToggle.setAttribute("aria-pressed", String(state.individualCorners));
+  elements.individualCornersToggle.hidden = !available;
   elements.individualCornerControls.hidden = !enabled;
   individualCornerControls.forEach((controls, index) => {
     const visible = enabled && index < count;
@@ -888,6 +902,7 @@ function getModuleScale() {
 
 function getModuleRangeProperties(style = state.moduleStyle) {
   if (style === "regular-polygon") return POLYGON_RANGE_PROPERTIES;
+  if (style === "wobbly-polygon") return WOBBLY_RANGE_PROPERTIES;
   if (style === "blob") return BLOB_RANGE_PROPERTIES;
   if (style === "figure") return FIGURE_RANGE_PROPERTIES;
   if (style === "gooey") return GOOEY_RANGE_PROPERTIES;
@@ -949,6 +964,7 @@ function getModuleGeometry(row, column, style = state.moduleStyle) {
 
 function getModuleGeometryResolver(style = state.moduleStyle) {
   const buildGeometry = style === "gooey" ? getGooeyModuleGeometry
+    : style === "wobbly-polygon" ? getWobblyModuleGeometry
     : style === "figure" ? getFigureGeometry : style === "blob" ? getBlobGeometry : getRegularPolygonGeometry;
   if (!hasRandomModuleProperties(style)) {
     const geometry = buildGeometry(style === "figure" ? {
@@ -1134,7 +1150,8 @@ function getRegularPolygonGeometry(properties = state) {
 function getWobblyPolygonGeometry(properties, { wobble, edgeBend, cornerRadius = 0 }) {
   if (wobble === 0 && edgeBend === 0) return getRegularPolygonGeometry({ ...properties, moduleCornerRadius: cornerRadius });
 
-  const base = getRegularPolygonGeometry({ ...properties, moduleCornerRadius: 0 });
+  const base = getRegularPolygonGeometry({ ...properties, moduleScale: 100, moduleCornerRadius: 0 });
+  const size = properties.moduleScale / 100;
   const maxShift = wobble / 100 * .35 / OUTER_FINDER_SIZE;
   const maxBend = edgeBend / 100 * .25 / OUTER_FINDER_SIZE;
   const vertices = [base.start, ...base.segments.map(({ end }) => end)].map(([x, y], index) => {
@@ -1144,7 +1161,7 @@ function getWobblyPolygonGeometry(properties, { wobble, edgeBend, cornerRadius =
   });
   if (maxBend === 0 && cornerRadius === 0) {
     const sides = vertices.slice(1).map((end) => ({ type: "line", end }));
-    return fitModulePath(vertices[0], sides, 1, { maxScale: 1 });
+    return fitModulePath(vertices[0], sides, size, { maxScale: size });
   }
 
   const trim = cornerRadius / 200;
@@ -1190,7 +1207,17 @@ function getWobblyPolygonGeometry(properties, { wobble, edgeBend, cornerRadius =
       });
     }
   });
-  return fitModulePath(edges[0].start, segments, 1, { maxScale: 1 });
+  return fitModulePath(edges[0].start, segments, size, { maxScale: size });
+}
+
+function getWobblyModuleGeometry(properties) {
+  const geometry = getWobblyPolygonGeometry(properties, {
+    wobble: properties.moduleWobble,
+    edgeBend: properties.moduleEdgeBend,
+    cornerRadius: properties.moduleCornerRadius,
+  });
+  geometry.pathTail ??= modulePathTail(geometry);
+  return geometry;
 }
 
 function moduleGeometryCommand(x, y, geometry) {
@@ -1198,7 +1225,7 @@ function moduleGeometryCommand(x, y, geometry) {
 }
 
 function supportsModuleMerge(style) {
-  return style === "regular-polygon" || style === "blob" || style === "gooey";
+  return style === "regular-polygon" || style === "wobbly-polygon" || style === "blob" || style === "gooey";
 }
 
 function getModuleMergeKey(style = state.moduleStyle) {
@@ -2317,16 +2344,8 @@ function render() {
   }
   elements.cutOuterMarkerCorners.setAttribute("aria-pressed", String(finderSettings.cutOuterMarkerCorners));
   elements.outerMarkerCornersOnly.setAttribute("aria-pressed", String(finderSettings.outerMarkerCornersOnly));
-  const showWobbly = finderSettings.outerMarkerStyle === "wobbly-polygon" && !finderSettings.outerAsModules;
-  elements.outerWobblyProperties.hidden = !showWobbly;
-  outerWobblyControls.forEach(({ key, input, output }) => {
-    const value = finderSettings.outerWobbly[key];
-    input.disabled = !showWobbly;
-    input.value = value;
-    output.textContent = `${value}%`;
-  });
   elements.innerPolygonProperties.hidden = finderSettings.innerMarkerStyle === "gooey";
-  finderGooeyControls.forEach(({ part, key, container, style, controls }) => {
+  finderCustomStyleControls.forEach(({ part, key, container, style, controls }) => {
     const visible = finderSettings[`${part}MarkerStyle`] === style && !finderSettings[`${part}AsModules`];
     container.hidden = !visible;
     controls.forEach(({ key: property, input, output }) => {
@@ -2350,17 +2369,21 @@ function render() {
   });
   elements.moduleStyle.value = state.moduleStyle;
   const showModuleGooey = state.moduleStyle === "gooey";
+  const showModuleWobbly = state.moduleStyle === "wobbly-polygon";
+  const showModulePolygon = state.moduleStyle === "regular-polygon";
   const mergeMode = state[getModuleMergeKey()];
   const showGooeyLinks = showModuleGooey && mergeMode !== "none";
   elements.moduleSizeField.hidden = showModuleGooey;
   elements.gooeyProperties.forEach((field) => { field.hidden = !showModuleGooey; });
+  elements.wobblyProperties.forEach((field) => { field.hidden = !showModuleWobbly; });
+  elements.moduleWobble.disabled = elements.moduleEdgeBend.disabled = !showModuleWobbly;
   elements.moduleGooeyLinkBallSize.closest(".range-field").hidden = !showGooeyLinks;
   elements.moduleGooeyLinkDensity.closest(".range-field").hidden = !showGooeyLinks;
   elements.moduleGooeyLinkDensity.disabled = !showGooeyLinks;
   const supportsMerge = supportsModuleMerge(state.moduleStyle);
   const randomProperties = getModuleRangeProperties();
   elements.moduleSides.closest(".range-field").hidden = !supportsMerge || showModuleGooey;
-  elements.polygonProperties.forEach((field) => { field.hidden = state.moduleStyle !== "regular-polygon"; });
+  elements.polygonProperties.forEach((field) => { field.hidden = !showModulePolygon && !showModuleWobbly; });
   elements.blobProperties.forEach((field) => { field.hidden = state.moduleStyle !== "blob"; });
   elements.shapeProperties.forEach((field) => { field.hidden = showModuleGooey || (!supportsMerge && state.moduleStyle !== "figure"); });
   elements.moduleMergeField.hidden = !supportsMerge;
@@ -2373,7 +2396,7 @@ function render() {
     const supportsRandom = key === "moduleGooeyLinkBallSize"
       ? showGooeyLinks : randomProperties.some(([property]) => property === key);
     const isRandom = supportsRandom && state.moduleRandom[key];
-    const individual = key === "moduleCornerRadius" && supportsRandom && state.individualCorners;
+    const individual = key === "moduleCornerRadius" && showModulePolygon && state.individualCorners;
     const steps = state.moduleSteps[key];
     const stepsControls = moduleStepsControls.get(key);
     const discrete = supportsRandom && Boolean(steps?.enabled);
@@ -2628,14 +2651,7 @@ elements.errorCorrection.addEventListener("change", () => {
   });
 });
 
-outerWobblyControls.forEach(({ key, input }) => {
-  input.addEventListener("input", () => {
-    getFinderSettings().outerWobbly[key] = Number(input.value);
-    render();
-  });
-});
-
-finderGooeyControls.forEach(({ key, controls }) => {
+finderCustomStyleControls.forEach(({ key, controls }) => {
   controls.forEach(({ key: property, input }) => {
     input.addEventListener("input", () => {
       getFinderSettings()[key][property] = Number(input.value);

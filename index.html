@@ -11,7 +11,7 @@
     <script src="vendor/qrcode.js?v=20261105-1" defer></script>
     <script src="logo-area.js?v=20261105-1" defer></script>
     <script src="gooey-polygon.js?v=20261126-33" defer></script>
-    <script src="script.js?v=20261126-33" defer></script>
+    <script src="script.js?v=20261127-2" defer></script>
   </head>
   <body>
     <main>
@@ -78,6 +78,7 @@
                 <span>Style</span>
                 <select id="moduleStyle" aria-label="Module style">
                   <option value="regular-polygon" selected>Regular polygon</option>
+                  <option value="wobbly-polygon">Wobbly polygon</option>
                   <option value="blob">Blob</option>
                   <option value="gooey">Gooey</option>
                   <option value="figure">Figure</option>
@@ -137,6 +138,20 @@
                 <span id="moduleSizeCountControl" class="range-control" hidden>
                   <input id="moduleSizeCount" type="range" min="2" max="3" step="1" value="2" aria-label="Number of random module sizes">
                   <output id="moduleSizeCountValue" for="moduleSizeCount">2</output>
+                </span>
+              </div>
+              <div class="range-field wobbly-property style-property" hidden>
+                <div class="property-heading"><label for="moduleWobble">Wobble</label></div>
+                <span class="range-control">
+                  <input id="moduleWobble" type="range" min="0" max="100" step="1" value="55">
+                  <output id="moduleWobbleValue" for="moduleWobble">55%</output>
+                </span>
+              </div>
+              <div class="range-field wobbly-property style-property" hidden>
+                <div class="property-heading"><label for="moduleEdgeBend">Edge bend</label></div>
+                <span class="range-control">
+                  <input id="moduleEdgeBend" type="range" min="0" max="100" step="1" value="0">
+                  <output id="moduleEdgeBendValue" for="moduleEdgeBend">0%</output>
                 </span>
               </div>
               <div class="range-field polygon-property style-property">
@@ -483,17 +498,41 @@
                   <div id="innerMarkerProperties">
                     <select id="innerMarkerStyle" aria-label="Inner style">
                       <option value="regular-polygon" selected>Regular polygon</option>
+                      <option value="wobbly-polygon">Wobbly polygon</option>
                       <option value="blob">Blob</option>
                       <option value="gooey">Gooey</option>
                       <option value="figure">Figures</option>
                     </select>
                     <div id="innerPolygonProperties" class="finder-polygon-properties"></div>
+                    <div id="innerWobblyProperties" class="finder-polygon-properties" hidden>
+                      <div class="range-field">
+                        <div class="property-heading"><label for="innerWobble">Wobble</label></div>
+                        <span class="range-control">
+                          <input id="innerWobble" data-wobbly="wobble" type="range" min="0" max="100" step="1" value="55">
+                          <output for="innerWobble">55%</output>
+                        </span>
+                      </div>
+                      <div class="range-field">
+                        <div class="property-heading"><label for="innerEdgeBend">Edge bend</label></div>
+                        <span class="range-control">
+                          <input id="innerEdgeBend" data-wobbly="edgeBend" type="range" min="0" max="100" step="1" value="0">
+                          <output for="innerEdgeBend">0%</output>
+                        </span>
+                      </div>
+                      <div class="range-field">
+                        <div class="property-heading"><label for="innerWobblyCornerRadius">Corner radius</label></div>
+                        <span class="range-control">
+                          <input id="innerWobblyCornerRadius" data-wobbly="cornerRadius" type="range" min="0" max="100" step="1" value="0">
+                          <output for="innerWobblyCornerRadius">0%</output>
+                        </span>
+                      </div>
+                    </div>
                     <div id="innerGooeyProperties" class="finder-polygon-properties" hidden>
                       <div class="range-field">
                         <div class="property-heading"><label for="innerGooeyDensity">Density</label></div>
                         <span class="range-control">
-                          <input id="innerGooeyDensity" data-gooey="density" type="range" min="1" max="9" step="1" value="7">
-                          <output for="innerGooeyDensity">7</output>
+                          <input id="innerGooeyDensity" data-gooey="density" type="range" min="1" max="9" step="1" value="9">
+                          <output for="innerGooeyDensity">9</output>
                         </span>
                       </div>
                       <div class="range-field">
